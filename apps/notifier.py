@@ -12,7 +12,7 @@ from aiohttp import ClientSession
 from modules import MAX_CHARS_USERS_HISTORY, MAP, create_connect
 import apps.logger as logger
 #
-from apps.funcs import send_message, run_action, save_event
+from apps.funcs import send_message, run_action, save_event, ensure_last_activity_support
 from modules import bot
 from apps.bot_info import bot_info
 
@@ -30,6 +30,47 @@ class Notifier():
     def __init__(self):
         self.bot = bot
         self.MESSAGES = MAP
+        self._notification_index = self._build_notification_index()
+
+    def _build_notification_index(self):
+        index = {}
+        for section in ("start", "callback"):
+            for message in self.MESSAGES.get(section, {}).values():
+                notifications = message.get("notifications", []) or []
+                for definition in notifications:
+                    label = definition.get("message")
+                    if not label:
+                        continue
+                    index.setdefault(label, []).append(definition)
+        return index
+
+    def _calculate_send_time(self, wait_config, reference_timestamp=None):
+        if not wait_config:
+            return None
+
+        reference_timestamp = reference_timestamp or int(time.time())
+
+        if (wait_seconds := wait_config.get("wait_seconds")) is not None:
+            return reference_timestamp + wait_seconds
+
+        if (target_datetime := wait_config.get("target_datetime")):
+            dt = datetime.strptime(target_datetime, "%d.%m.%Y %H:%M")
+            return int(dt.timestamp())
+
+        target_time_str = wait_config.get("time", "00:00")
+        delta_days = wait_config.get("delta_days", 1)
+
+        now_dt = datetime.fromtimestamp(reference_timestamp)
+        target_hour, target_minute = map(int, target_time_str.split(':'))
+        target_date = now_dt + timedelta(days=delta_days)
+        target_datetime = datetime(
+            target_date.year,
+            target_date.month,
+            target_date.day,
+            target_hour,
+            target_minute,
+        )
+        return int(target_datetime.timestamp())
 
     async def main(self):
         await logger.info(f"Модуль отложенных уведомлений успешно запущен!")
@@ -52,32 +93,9 @@ class Notifier():
             label = notification.get('message')
             wait = notification.get('at_time')
 
-            if (wait_seconds:=wait.get("wait_seconds", None)):
-                # определяем, во сколько должно отправится уведомление
-                send_time = int(time.time()) + wait_seconds
-            elif (target_datetime:=wait.get("target_datetime", None)):
-                # target_datetime имеет вид "дд.мм.гггг чч:мм" по GMT (в +0 часовом поясе!)
-                dt = datetime.strptime(target_datetime, "%d.%m.%Y %H:%M")
-                # Конвертируем в timestamp
-                send_time = int(dt.timestamp())
-            # если это указание определенного времени отправки и сдвиг дней
-            else:
-                # Получение текущего времени в секундах с начала эпохи
-                now_seconds = int(time.time())
-
-                # Получение текущего времени в формате datetime
-                now = datetime.fromtimestamp(now_seconds)
-                target_time_str = wait.get("time", "00:00")
-                delta_days = wait.get("delta_days", 1)
-
-                # Разделение строки времени на часы и минуты
-                target_hour, target_minute = map(int, target_time_str.split(':'))
-                # Вычисление целевой даты и времени
-                target_date = now + timedelta(days=delta_days)
-                target_datetime = datetime(target_date.year, target_date.month, target_date.day, target_hour, target_minute)
-
-                # Преобразование целевого времени в секунды с начала эпохи
-                send_time = int(target_datetime.timestamp())
+            send_time = self._calculate_send_time(wait_config=wait)
+            if send_time is None:
+                continue
 
             # # раскомментить при первом запуске, чтобы создать уникальный фильтр на добавление записей
             # await db.execute(
@@ -110,6 +128,7 @@ class Notifier():
     async def load_notifications(self):
         now = int(time.time())
         db = await create_connect()
+        await ensure_last_activity_support(db=db)
 
         # закрываем уведомления для тех, кто прошёл воронку (пока название воронки всегда=default, т.к. пока нет механизма раздающего разные названия разным воронкам)
         await db.execute(
@@ -130,6 +149,10 @@ class Notifier():
             LEFT JOIN users u ON u.id = n.user_id
             WHERE n.is_active = TRUE
             AND u.user_block = FALSE
+            AND (
+                u.last_activity IS NULL
+                OR u.last_activity >= timezone('UTC', now()) - INTERVAL '60 days'
+            )
             AND n.time_to_send < $1
             AND n.user_id NOT IN (
                 SELECT user_id FROM funnel_passed WHERE funnel_name = 'default' AND passed = TRUE
@@ -140,6 +163,49 @@ class Notifier():
 
         await db.close()
         return notifications
+
+    async def recalculate_user_notifications(self, user_id: int):
+        db = await create_connect()
+        now_ts = int(time.time())
+        try:
+            notifications = await db.fetch(
+                """
+                SELECT id, label, time_to_send
+                FROM notifications
+                WHERE user_id = $1
+                  AND is_active = TRUE
+                """,
+                user_id,
+            )
+
+            for notification in notifications:
+                time_to_send = notification.get("time_to_send")
+                if time_to_send is None or time_to_send >= now_ts:
+                    continue
+
+                templates = self._notification_index.get(notification.get("label"), [])
+                if not templates:
+                    continue
+
+                wait_config = templates[0].get("at_time") if templates[0] else None
+                if not wait_config or wait_config.get("target_datetime"):
+                    continue
+
+                new_time = self._calculate_send_time(wait_config, reference_timestamp=now_ts)
+                if new_time is None:
+                    continue
+
+                await db.execute(
+                    """
+                    UPDATE notifications
+                    SET time_to_send = $1
+                    WHERE id = $2
+                    """,
+                    new_time,
+                    notification.get("id"),
+                )
+        finally:
+            await db.close()
 
 
     async def close_notification(self, notification_id=None, user_id=None, label=None):

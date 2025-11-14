@@ -105,6 +105,7 @@ async def user_click_handler(call, bot):
     user: User = chat
     user_id = user.id
     username = user.username
+    await funcs.touch_user_activity(user_id)
 
     # получаем текст самого сообщения
     message_text = call.message.text
