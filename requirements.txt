@@ -1,0 +1,5 @@
+colorama
+aioconsole
+aiohttp
+aiogram
+python_dotenv
