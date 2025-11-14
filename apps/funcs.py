@@ -591,6 +591,11 @@ async def check_subs(channel, user_id, bot):
         else:
             return False
 
+# для контроля схемы last_activity
+_LAST_ACTIVITY_SCHEMA_LOCK = asyncio.Lock()
+_LAST_ACTIVITY_SCHEMA_INITIALIZED = False
+
+
 # для записи в БД действие юзера
 async def add_history(user_id, text):
     db = await create_connect()
@@ -599,6 +604,78 @@ async def add_history(user_id, text):
         text, MAX_CHARS_USERS_HISTORY
     )
     await db.close()
+
+
+async def ensure_last_activity_support(db=None):
+    """Ensures that the users table contains the last_activity column."""
+    global _LAST_ACTIVITY_SCHEMA_INITIALIZED
+
+    if _LAST_ACTIVITY_SCHEMA_INITIALIZED:
+        return
+
+    owns_connection = False
+    if db is None:
+        db = await create_connect()
+        owns_connection = True
+
+    try:
+        async with _LAST_ACTIVITY_SCHEMA_LOCK:
+            if not _LAST_ACTIVITY_SCHEMA_INITIALIZED:
+                await db.execute(
+                    """
+                    ALTER TABLE users
+                    ADD COLUMN IF NOT EXISTS last_activity TIMESTAMPTZ
+                    """
+                )
+                await db.execute(
+                    """
+                    ALTER TABLE users
+                    ALTER COLUMN last_activity SET DEFAULT timezone('UTC', now())
+                    """
+                )
+                await db.execute(
+                    """
+                    UPDATE users
+                    SET last_activity = timezone('UTC', now())
+                    WHERE last_activity IS NULL
+                    """
+                )
+                _LAST_ACTIVITY_SCHEMA_INITIALIZED = True
+    finally:
+        if owns_connection and db:
+            await db.close()
+
+
+async def touch_user_activity(user_id: int):
+    """Updates user's last activity timestamp and recalculates notifications."""
+    db = None
+    try:
+        db = await create_connect()
+        await ensure_last_activity_support(db=db)
+        await db.execute(
+            """
+            UPDATE users
+            SET last_activity = timezone('UTC', now())
+            WHERE id = $1
+            """,
+            user_id,
+        )
+    except Exception as error:
+        await logger.error(f"Не удалось обновить last_activity пользователя {user_id}: {error}")
+        return
+    finally:
+        if db:
+            await db.close()
+
+    try:
+        from apps.notifier import notificator
+
+        await notificator.recalculate_user_notifications(user_id=user_id)
+    except Exception as error:
+        await logger.error(
+            f"Не удалось пересчитать уведомления пользователя {user_id}: {error}"
+        )
+
 
 # для проверки действий юзера
 async def run_action(action, user_id, bot):

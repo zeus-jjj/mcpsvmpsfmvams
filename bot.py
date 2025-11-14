@@ -44,6 +44,7 @@ async def process_user_blocked_bot(event: types.ChatMemberUpdated):
         )
     await db.close()
     await notificator.blocked(user_id=event.from_user.id, is_blocked=True)
+    await funcs.touch_user_activity(event.from_user.id)
 
 # вызывается, когда юзер разблокировал бота
 @dp.my_chat_member(ChatMemberUpdatedFilter(member_status_changed=MEMBER))
@@ -57,6 +58,7 @@ async def user_unblocked_bot(event: types.ChatMemberUpdated):
         )
     await db.close()
     await notificator.blocked(user_id=event.from_user.id, is_blocked=False)
+    await funcs.touch_user_activity(event.from_user.id)
 
 
 
@@ -200,6 +202,7 @@ async def process_start_command(message: types.Message, bot):
         )
 
     await db.close()
+    await funcs.touch_user_activity(message.from_user.id)
 
     # если был передан параметр для авторизации на покерхаб
     if auth_code:
@@ -237,6 +240,7 @@ async def message_handler(message, state, bot):
     
     # добавляем в историю event отправку юзером сообщения
     await funcs.save_event(user_id=user_id, event="send_msg", rewrite=True)
+    await funcs.touch_user_activity(user_id)
 
     # Айди юзеров, которые могут общаться с ИИ
     # Пока-что хардкод, со списком айдишек юзеров. Потом автоматика должна определять, куда слать сообщения

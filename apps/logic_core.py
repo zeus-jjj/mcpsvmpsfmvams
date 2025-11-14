@@ -8,7 +8,7 @@ from collections import OrderedDict
 #
 import apps.logger as logger
 #
-from apps.funcs import run_action, send_message, add_history, save_event, close_old_notifications
+from apps.funcs import run_action, send_message, add_history, save_event, close_old_notifications, touch_user_activity
 from apps.notifier import notificator
 from modules import MAP, FSMStates
 # 
@@ -43,6 +43,7 @@ async def start(bot, message, persona, msg):
     # текущий маршрут
     route = "start"
     user_id = message.from_user.id
+    await touch_user_activity(user_id)
     
     current_map = MAP['start'] if not msg else MAP['callback']
 
@@ -92,6 +93,7 @@ async def start(bot, message, persona, msg):
 async def handle_persona_callback(call, state, bot):
     callback_data = call.data
     user_id = call.from_user.id
+    await touch_user_activity(user_id)
     await call.answer()
 
 
@@ -159,7 +161,8 @@ async def handle_persona_callback(call, state, bot):
 @router.message(FSMStates.fsm_context)
 async def process_fsm(message, state, bot):
     user_id = message.from_user.id
-    
+    await touch_user_activity(user_id)
+
     async with await get_user_lock(user_id):
         data = await state.get_data()
         collected_items = 0 # кол-во собанных данных

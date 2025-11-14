@@ -4,7 +4,7 @@ from aiogram import Router
 # 
 import apps.logger as logger
 from modules import MAP
-from apps.funcs import send_message, add_history
+from apps.funcs import send_message, add_history, touch_user_activity
 
 router = Router()
 
@@ -67,6 +67,7 @@ async def auth_pokerhub(call, bot):
     await call.answer()
     auth_code = call.data.replace('auth_ph=', '')
     user_id = call.from_user.id
+    await touch_user_activity(user_id)
     username = call.from_user.username or None
     first_name = call.from_user.first_name
     last_name = call.from_user.last_name
@@ -115,6 +116,7 @@ async def auth_pokerhub(call, bot):
     await call.answer()
     auth_code = call.data.replace('auth_ph=', '')
     user_id = call.from_user.id
+    await touch_user_activity(user_id)
 
     url = "https://pokerhub.pro/api/tg/authbybot"
     payload = {
