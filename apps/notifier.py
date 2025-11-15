@@ -143,6 +143,12 @@ class SmartNotifier:
         """Возобновляет уведомления при активности пользователя"""
         db = await create_connect()
 
+        # НОВОЕ: Проверяем, зарегистрирован ли пользователь
+        is_registered = await db.fetchrow("""
+            SELECT COUNT(*) as cnt FROM events
+            WHERE user_id = $1 AND event_type = 'course_registration'
+        """, user_id)
+
         # Проверяем приостановленные уведомления
         paused = await db.fetch("""
             SELECT id, label, time_to_send
@@ -156,8 +162,12 @@ class SmartNotifier:
         if paused:
             now = int(time.time())
 
-            # Пересчитываем время отправки
             for notif in paused:
+                # НОВОЕ: Пропускаем догревочные уведомления для зарегистрированных
+                if notif['label'].startswith('warmup_') and is_registered and is_registered['cnt'] > 0:
+                    await logger.info(f"Пропускаем догревочное уведомление {notif['label']} для зарегистрированного пользователя {user_id}")
+                    continue
+
                 new_time = now + 300  # Через 5 минут после активности
 
                 await db.execute("""
@@ -169,45 +179,51 @@ class SmartNotifier:
                     WHERE id = $2
                 """, new_time, notif['id'])
 
-            await logger.info(f"Возобновлены {len(paused)} уведомлений для пользователя {user_id}")
+            resumed_count = len([n for n in paused if not (n['label'].startswith('warmup_') and is_registered and is_registered['cnt'] > 0)])
 
-            # Записываем в историю
-            await db.execute("""
-                INSERT INTO user_history (user_id, text)
-                VALUES ($1, $2)
-            """, user_id, "Уведомления возобновлены после активности")
+            if resumed_count > 0:
+                await logger.info(f"Возобновлены {resumed_count} уведомлений для пользователя {user_id}")
+
+                await db.execute("""
+                    INSERT INTO user_history (user_id, text)
+                    VALUES ($1, $2)
+                """, user_id, "Уведомления возобновлены после активности")
 
         await db.close()
 
     async def add_notifications(self, user_id: int, notifications: list):
-        """Добавляет уведомления с проверкой активности и воронки"""
-        db = await create_connect()
+       """Добавляет уведомления с проверкой активности и воронки"""
+       db = await create_connect()
 
-        # Проверяем статус пользователя
-        user_status = await db.fetchrow("""
-            SELECT
-                u.timestamp_registration,
-                -- Проверяем, в воронке ли пользователь курса
-                (SELECT COUNT(*) FROM user_funnel
-                 WHERE user_id = $1
-                 AND (label LIKE '%course%' OR label LIKE '%spin%'
-                      OR label LIKE '%mtt%' OR label LIKE '%cash%')) as in_course_funnel,
-                -- Последняя активность
-                COALESCE(
-                    u.last_activity,
-                    (SELECT MAX(timestamp) FROM user_history WHERE user_id = $1)
-                ) as last_activity
-            FROM users u
-            WHERE u.id = $1
-        """, user_id)
+       # Проверяем статус пользователя
+       user_status = await db.fetchrow("""
+           SELECT
+               u.timestamp_registration,
+               -- Проверяем, зарегистрирован ли на курсе
+               (SELECT COUNT(*) FROM events
+                WHERE user_id = $1
+                AND event_type = 'course_registration') as is_registered,
+               -- Проверяем, в воронке ли пользователь курса
+               (SELECT COUNT(*) FROM user_funnel
+                WHERE user_id = $1
+                AND (label LIKE '%course%' OR label LIKE '%spin%'
+                     OR label LIKE '%mtt%' OR label LIKE '%cash%')) as in_course_funnel,
+               -- Последняя активность
+               COALESCE(
+                   u.last_activity,
+                   (SELECT MAX(timestamp) FROM user_history WHERE user_id = $1)
+               ) as last_activity
+           FROM users u
+           WHERE u.id = $1
+       """, user_id)
 
-        if user_status:
-            # ДОГРЕВОЧНЫЕ УВЕДОМЛЕНИЯ: Если НЕ в воронке курса
-            if user_status['in_course_funnel'] == 0:
-                await self._add_warmup_notifications(user_id, db)
+       if user_status:
+           # ДОГРЕВОЧНЫЕ УВЕДОМЛЕНИЯ: Если НЕ в воронке курса И НЕ зарегистрирован
+           if user_status['in_course_funnel'] == 0 and user_status['is_registered'] == 0:
+               await self._add_warmup_notifications(user_id, db)
 
         # Добавляем обычные уведомления
-        for notification in notifications:
+           for notification in notifications:
             label = notification.get('message')
             wait = notification.get('at_time')
 
@@ -228,10 +244,10 @@ class SmartNotifier:
                     ON CONFLICT (user_id, label) DO NOTHING
                 """, user_id, send_time, label, True)
 
-        await db.close()
+           await db.close()
 
     async def _add_warmup_notifications(self, user_id: int, db):
-        """Добавляет догревочные уведомления для пользователей НЕ в воронке курса"""
+        """Добавляет догревочные уведомления для незарегистрированных пользователей"""
         # Проверяем существующие догревочные уведомления
         existing = await db.fetchrow("""
             SELECT COUNT(*) as cnt FROM notifications
@@ -239,6 +255,17 @@ class SmartNotifier:
         """, user_id)
 
         if existing and existing['cnt'] > 0:
+            await logger.info(f"У пользователя {user_id} уже есть догревочные уведомления")
+            return
+
+        # ВАЖНО: Проверяем, что пользователь НЕ зарегистрирован
+        is_registered = await db.fetchrow("""
+            SELECT COUNT(*) as cnt FROM events
+            WHERE user_id = $1 AND event_type = 'course_registration'
+        """, user_id)
+
+        if is_registered and is_registered['cnt'] > 0:
+            await logger.info(f"Пользователь {user_id} зарегистрирован, догрев не нужен")
             return
 
         await logger.info(f"Добавляем догревочные уведомления для пользователя {user_id}")
