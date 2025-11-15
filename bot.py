@@ -59,6 +59,9 @@ async def user_unblocked_bot(event: types.ChatMemberUpdated):
     await db.close()
     await notificator.blocked(user_id=event.from_user.id, is_blocked=False)
 
+    # ДОБАВЛЕНО: Возобновляем уведомления при разблокировке
+    await notificator.resume_user_notifications(event.from_user.id)
+
 
 
 # для теста авторизации на ПХ
@@ -105,20 +108,22 @@ async def process_start_command(message: types.Message, bot):
     select_quiz_string = data.get('sel_quiz')
     # чтобы перейти к сообщению с таким идентификатором
     msg = data.get("msg", None)
-    await logger.info(f"Бот запущен пользователем {message.from_user.username}, id={message.from_user.id}, data={data}")
+
+    user_id = message.from_user.id
+    await logger.info(f"Бот запущен пользователем {message.from_user.username}, id={user_id}, data={data}")
 
     db = await create_connect()
     # проверяем, есть-ли такой юзер в БД
-    user_id = await db.fetchrow(
-        """SELECT id FROM users WHERE id = $1""", message.from_user.id
+    existing_user = await db.fetchrow(
+        """SELECT id FROM users WHERE id = $1""", user_id
     )
     # По дефолту ставим unknown, далее если у него есть аватарка - это значение поменяется
     avatar = f'unknown_user.jpg'
     # Проверяем, есть-ли на диске аватарка юзера
     if not exists(join(getenv('static_folder'), 'img',
-                    'avatars', f'avatar_{message.from_user.id}.jpg')
+                    'avatars', f'avatar_{user_id}.jpg')
                     ):
-        profile_pictures = await bot.get_user_profile_photos(message.from_user.id, limit=1)
+        profile_pictures = await bot.get_user_profile_photos(user_id, limit=1)
         avatars = profile_pictures.photos
         # Если у юзера есть фото профиля
         if len(avatars) > 0:
@@ -126,9 +131,9 @@ async def process_start_command(message: types.Message, bot):
             # Скачиваем его
             await bot.download_file(file.file_path,
                 join(getenv('static_folder'), 'img',
-                    'avatars', f'avatar_{message.from_user.id}.jpg'))
+                    'avatars', f'avatar_{user_id}.jpg'))
 
-            avatar = f'avatar_{message.from_user.id}.jpg'
+            avatar = f'avatar_{user_id}.jpg'
 
         await db.execute(
             """INSERT INTO users (id, username, last_name, first_name, photo_code)
@@ -139,26 +144,36 @@ async def process_start_command(message: types.Message, bot):
                 last_name = EXCLUDED.last_name,
                 first_name = EXCLUDED.first_name,
                 photo_code = EXCLUDED.photo_code""",
-            message.from_user.id, message.from_user.username or "Unknown",
+            user_id, message.from_user.username or "Unknown",
             message.from_user.last_name, message.from_user.first_name, avatar
         )
 
 
     # если он есть, значит запускал бота
-    if user_id:
-        # print(f"Этот юзер уже запускал бота: {user_id.get('id', None)}")
+    if existing_user:
+        # print(f"Этот юзер уже запускал бота: {existing_user.get('id', None)}")
+
+        # ДОБАВЛЕНО: Записываем активность существующего пользователя
+        await db.execute(
+            """INSERT INTO user_history (user_id, text)
+            VALUES ($1, $2)""",
+            user_id, "Пользователь запустил бота"
+        )
+
+        # ДОБАВЛЕНО: Возобновляем уведомления при повторном запуске
+        await notificator.resume_user_notifications(user_id)
 
         # # временной решение для отладки (ЗАКОММЕНТИТЬ ИЛИ УДАЛИТЬ ПРИ ФИНАЛЬНОМ ДЕПЛОЕ)
         # await db.execute(
         #     """UPDATE lead_resources
         #     SET campaign = $2, source = $3, medium = $4, term = $5, content = $6, direction_id = (SELECT id FROM directions WHERE code=$7 LIMIT 1)
         #     WHERE user_id = $1""",
-        #     message.from_user.id, data.get('campaign'), data.get('source'), data.get('medium'), data.get('term'), data.get('content'), data.get('land').upper() if data.get('land') else None
+        #     user_id, data.get('campaign'), data.get('source'), data.get('medium'), data.get('term'), data.get('content'), data.get('land').upper() if data.get('land') else None
         # )
 
         # получаем из БД utm-метки юзера, которые были при первом его запуске бота
         user_utm = await db.fetchrow(
-            """SELECT campaign, source, medium, term, content, direction_id FROM lead_resources WHERE user_id = $1""", message.from_user.id
+            """SELECT campaign, source, medium, term, content, direction_id FROM lead_resources WHERE user_id = $1""", user_id
         )
         # Преобразуем объект Record в словарь
         user_utm = dict(user_utm.items()) if user_utm else {}
@@ -179,12 +194,12 @@ async def process_start_command(message: types.Message, bot):
 
         await db.execute(
             """INSERT INTO users (id, username, last_name, first_name, photo_code) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO NOTHING""",
-            message.from_user.id, message.from_user.username or "Unknown",
+            user_id, message.from_user.username or "Unknown",
             message.from_user.last_name, message.from_user.first_name, avatar
         )
 
         await db.execute(
-            """INSERT INTO user_history (user_id, text) VALUES ($1, $2)""", message.from_user.id,
+            """INSERT INTO user_history (user_id, text) VALUES ($1, $2)""", user_id,
             f"Начал пользоваться ботом." + "" if data == {} else f"\nСсылка перехода в бота: {raw_data}"
         )
 
@@ -197,11 +212,11 @@ async def process_start_command(message: types.Message, bot):
         await db.execute(
             """INSERT INTO lead_resources (user_id, campaign, source, medium, term, content, direction_id, referer_url, raw_link)
             VALUES ($1, $2, $3, $4, $6, $7, (SELECT id FROM directions WHERE code=$5 LIMIT 1), $8, $9) ON CONFLICT (user_id) DO NOTHING""",
-            message.from_user.id, data.get('ca'), data.get('s'), data.get('m'), data.get('t'), data.get('co'), data.get('land').upper() if data.get('land') else None, referer_url, raw_data
+            user_id, data.get('ca'), data.get('s'), data.get('m'), data.get('t'), data.get('co'), data.get('land').upper() if data.get('land') else None, referer_url, raw_data
         )
 
     await db.close()
-    await funcs.touch_user_activity(message.from_user.id)
+    await funcs.touch_user_activity(user_id)
 
 
     # если был передан параметр для авторизации на покерхаб
@@ -218,7 +233,7 @@ async def process_start_command(message: types.Message, bot):
     # else:
     #     assistant = ragflow.client.list_assistants(name=ragflow.assistant_name)
     #     if assistant:
-    #         sessions = ragflow.client.list_sessions(assistant=assistant[0], name=f"{ragflow.session_base_name}_{message.from_user.id}")
+    #         sessions = ragflow.client.list_sessions(assistant=assistant[0], name=f"{ragflow.session_base_name}_{user_id}")
     #         if sessions:
     #             ragflow.client.clear_chat_history(assistant[0], ids=[session.id for session in sessions])
 
@@ -240,6 +255,9 @@ async def message_handler(message, state, bot):
 
     # добавляем в историю event отправку юзером сообщения
     await funcs.save_event(user_id=user_id, event="send_msg", rewrite=True)
+
+    # ДОБАВЛЕНО: Обновляем активность пользователя при отправке любого сообщения
+    await funcs.touch_user_activity(user_id)
 
     # Айди юзеров, которые могут общаться с ИИ
     # Пока-что хардкод, со списком айдишек юзеров. Потом автоматика должна определять, куда слать сообщения
