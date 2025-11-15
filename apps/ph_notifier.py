@@ -13,7 +13,7 @@ import pytz
 import apps.logger as logger
 from threading import Thread
 import re
-# 
+#
 from modules import MAX_CHARS_USERS_HISTORY, bot, create_connect
 import apps.funcs as funcs
 from apps.bot_info import bot_info
@@ -31,10 +31,10 @@ router = Router()
 KEYBOARDS = {
     "rating": {
         "buttons": [
-            {"title":"1️⃣", "call":"1"}, 
-            {"title":"2️⃣", "call":"2"}, 
-            {"title":"3️⃣", "call":"3"}, 
-            {"title":"4️⃣", "call":"4"}, 
+            {"title":"1️⃣", "call":"1"},
+            {"title":"2️⃣", "call":"2"},
+            {"title":"3️⃣", "call":"3"},
+            {"title":"4️⃣", "call":"4"},
             {"title":"5️⃣", "call":"5"}
         ],
         "answer": "⭐️ Спасибо за оценку! Ваше мнение важно для нас! ⭐️",
@@ -107,6 +107,7 @@ async def user_click_handler(call, bot):
     username = user.username
     await funcs.touch_user_activity(user_id)
 
+
     # получаем текст самого сообщения
     message_text = call.message.text
 
@@ -136,7 +137,7 @@ async def user_click_handler(call, bot):
     # удаляем инфу о кнопках из БД
     db = await create_connect()
     await db.execute(
-    """DELETE FROM msg_keys WHERE user_id = $1 AND message_id = $2""", 
+    """DELETE FROM msg_keys WHERE user_id = $1 AND message_id = $2""",
     str(user_id), message_id
     )
     await db.close()
@@ -173,13 +174,13 @@ async def find_keyboards(text: str):
     inline_keyboard = None
     # список кастомных кнопок
     custom_keys = []
-    
+
     for key, value in KEYBOARDS.items():
         # задаём паттерн
         pattern = rf"\[key='{key}'.*?\]"
         # Ищем все совпадения с заданным паттерном в тексте
         matches = re.findall(pattern, text)
-        
+
         for match in matches:
             # счётчик добавленных кнопок (чтобы можно было ряды создавать)
             keys_count = 0
@@ -213,7 +214,7 @@ async def find_keyboards(text: str):
                     if param:
                         # извлекаем значение параметра
                         params[label] = param.group(1)
-                        
+
                 # проверка, какие параметры были извлечены
                 # если это кнопка-ссылка
                 if (url:=params.get("url", None)) and (btn_text:=params.get("btn_text", None)):
@@ -224,7 +225,7 @@ async def find_keyboards(text: str):
                 # параметр, отвечающий за текст ответа при нажатии кнопки
                 if "answer" in params:
                     answer = params.get("answer", None)
-                    
+
                 # добавляем инфу о кнопке в словарь, если это не кнопка-ссылка
                 if not url:
                     custom_keys.append({"text": btn_text, "answer": answer, "number": len(custom_keys)})
@@ -238,7 +239,7 @@ async def find_keyboards(text: str):
 
 
     # если кнопки расставлены - создаём клавиатуру
-    if keyboards:    
+    if keyboards:
         inline_keyboard = InlineKeyboardMarkup(inline_keyboard=keyboards)
     else:
         inline_keyboard = []
@@ -300,14 +301,14 @@ async def send_alerts(notifications, conf_data):
                     # проходимся по кнопкам
                     for key in custom_keys:
                         await db.execute(
-                        """INSERT INTO msg_keys (user_id, message_id, key_text, answer, key_label) VALUES ($1, $2, $3, $4, $5)""", 
+                        """INSERT INTO msg_keys (user_id, message_id, key_text, answer, key_label) VALUES ($1, $2, $3, $4, $5)""",
                         user.get('user_id'), message_id, key["text"], key["answer"], str(key["number"])
                     )
                     await db.close()
             # если кнопок нет - отправляем просто текст сообщения
             else:
                 await bot.send_message(chat_id=user.get('user_id'), text=message_text)
-            
+
             await logger.info(f"Уведомление для @{user.get('user')} доставлено!")
 
 
@@ -323,8 +324,8 @@ async def send_alerts(notifications, conf_data):
             # # Отправляем в JIVO сообщение, чтобы сапорты не теряли контекст
             # username = user.get("user")
             # user_id = user.get('user_id')
-            # result = await funcs.send_to_jivo(text=", 
-            #     user_id=user_id, 
+            # result = await funcs.send_to_jivo(text=",
+            #     user_id=user_id,
             #     intent="Обращение из телеграм" + (f" https://t.me/{username}" if username else "") if username else None,
             #     invite=f"Для просмотра истории переписки с пользователем, можете посетить: https://telegram.pokerhub.pro/profile/{user_id}",
             #     url=f"https://telegram.pokerhub.pro/profile/{user_id}"
@@ -421,7 +422,7 @@ async def send_alerts(notifications, conf_data):
 
     # закрываем тех, кому удалось отправить
     await close_notifications(alerts)
-   
+
     # отправляем в ДС таски
     await discord_alert(users_errors=users_errors, conf_data=conf_data)
 
@@ -511,7 +512,7 @@ async def send_msg(msg: str):
     except Exception as error:
         await logger.error(f"При отправке уведомления в дискорд возникла ошибка: {error}")
         return None
-            
+
 
 async def update_date(errors=None):
     # обновляет в JSON дату последней отправки
@@ -570,7 +571,7 @@ async def main():
             await logger.error(f"Возникла ошибка в главном цикле: {error}")
         finally:
             await asyncio.sleep(180)
-            
+
 
 if __name__ == "__main__":
     asyncio.run(main())

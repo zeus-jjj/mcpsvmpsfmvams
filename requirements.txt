@@ -3,3 +3,6 @@ aioconsole
 aiohttp
 aiogram
 python_dotenv
+asyncpg
+pytest
+pytest-asyncio

@@ -15,7 +15,7 @@ import apps.ph_notifier as notifier
 # from apps import ragflow
 
 # импортируем ядро логики бота
-import apps.logic_core as logic_core 
+import apps.logic_core as logic_core
 import apps.auth_pokerhub as auth_pokerhub
 import apps.funcs as funcs
 import apps.logger as logger
@@ -58,7 +58,6 @@ async def user_unblocked_bot(event: types.ChatMemberUpdated):
         )
     await db.close()
     await notificator.blocked(user_id=event.from_user.id, is_blocked=False)
-    await funcs.touch_user_activity(event.from_user.id)
 
 
 
@@ -70,11 +69,11 @@ async def process_start_command(message: types.Message, bot):
     # print(message.text.replace('/start', ''))
     raw_data = message.text.replace('/start', '').lstrip()
     try:
-        data = get_data(raw_data)  
+        data = get_data(raw_data)
     except Exception as error:
         await logger.error(f"Не удалось извлечь метки из ссылки: {raw_data} у пользователя с id={message.from_user.id}!")
         data = {}
-    
+
 
 
 
@@ -151,8 +150,8 @@ async def process_start_command(message: types.Message, bot):
 
         # # временной решение для отладки (ЗАКОММЕНТИТЬ ИЛИ УДАЛИТЬ ПРИ ФИНАЛЬНОМ ДЕПЛОЕ)
         # await db.execute(
-        #     """UPDATE lead_resources 
-        #     SET campaign = $2, source = $3, medium = $4, term = $5, content = $6, direction_id = (SELECT id FROM directions WHERE code=$7 LIMIT 1) 
+        #     """UPDATE lead_resources
+        #     SET campaign = $2, source = $3, medium = $4, term = $5, content = $6, direction_id = (SELECT id FROM directions WHERE code=$7 LIMIT 1)
         #     WHERE user_id = $1""",
         #     message.from_user.id, data.get('campaign'), data.get('source'), data.get('medium'), data.get('term'), data.get('content'), data.get('land').upper() if data.get('land') else None
         # )
@@ -176,14 +175,14 @@ async def process_start_command(message: types.Message, bot):
 
         if auth_code:
             # platform заменил на source
-            data["s"] = "auth_pokerhub"      
+            data["s"] = "auth_pokerhub"
 
         await db.execute(
             """INSERT INTO users (id, username, last_name, first_name, photo_code) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO NOTHING""",
             message.from_user.id, message.from_user.username or "Unknown",
             message.from_user.last_name, message.from_user.first_name, avatar
         )
-        
+
         await db.execute(
             """INSERT INTO user_history (user_id, text) VALUES ($1, $2)""", message.from_user.id,
             f"Начал пользоваться ботом." + "" if data == {} else f"\nСсылка перехода в бота: {raw_data}"
@@ -191,18 +190,19 @@ async def process_start_command(message: types.Message, bot):
 
         auth_user_data = await auth_pokerhub.get_user_data_auth(auth_code=auth_code)
         referer_url = auth_user_data.get('referer', None)
-        
+
         # записываем в БД utm-метки (если они уже там есть - запрос будет проигнорирован)
         # Было: platform, company, content
         # Стало: campaign (ca), source (s), medium (m), term (t), content (co)
         await db.execute(
-            """INSERT INTO lead_resources (user_id, campaign, source, medium, term, content, direction_id, referer_url, raw_link) 
+            """INSERT INTO lead_resources (user_id, campaign, source, medium, term, content, direction_id, referer_url, raw_link)
             VALUES ($1, $2, $3, $4, $6, $7, (SELECT id FROM directions WHERE code=$5 LIMIT 1), $8, $9) ON CONFLICT (user_id) DO NOTHING""",
             message.from_user.id, data.get('ca'), data.get('s'), data.get('m'), data.get('t'), data.get('co'), data.get('land').upper() if data.get('land') else None, referer_url, raw_data
         )
 
     await db.close()
     await funcs.touch_user_activity(message.from_user.id)
+
 
     # если был передан параметр для авторизации на покерхаб
     if auth_code:
@@ -221,7 +221,7 @@ async def process_start_command(message: types.Message, bot):
     #         sessions = ragflow.client.list_sessions(assistant=assistant[0], name=f"{ragflow.session_base_name}_{message.from_user.id}")
     #         if sessions:
     #             ragflow.client.clear_chat_history(assistant[0], ids=[session.id for session in sessions])
-                
+
     # Это раньше тут подключалась воронка по файлу map.json с персонами
     else:
         # пробуем подключить нужную персону, если переданы нужные метки
@@ -237,10 +237,9 @@ async def message_handler(message, state, bot):
     user_full_name = message.from_user.full_name
     username = message.from_user.username or None
     user_id = message.from_user.id
-    
+
     # добавляем в историю event отправку юзером сообщения
     await funcs.save_event(user_id=user_id, event="send_msg", rewrite=True)
-    await funcs.touch_user_activity(user_id)
 
     # Айди юзеров, которые могут общаться с ИИ
     # Пока-что хардкод, со списком айдишек юзеров. Потом автоматика должна определять, куда слать сообщения
@@ -342,7 +341,7 @@ async def message_handler(message, state, bot):
         for attachment in attachments:
             # Отправляем в JIVO
             result = await funcs.send_to_jivo(
-                user_id=user_id, 
+                user_id=user_id,
                 # thumb=attachment.get("url") if attachment.get("type") == "photo" else None,
                 # file=attachment.get("url") if attachment.get("type") == "document" or attachment.get("type") == "photo" else None,
                 # video=attachment.get("url") if attachment.get("type") == "video" else None,
@@ -361,10 +360,10 @@ async def message_handler(message, state, bot):
                 file_name = result.get('file_name', None)
                 original_file_name = result.get('original_file_name', None)
                 if file_name and original_file_name:
-                    saved = await funcs.add_msg_to_history(content=original_file_name, 
-                                                           name=file_name, 
-                                                           type=attachment.get('file_type'), 
-                                                           chat_id=user_id, 
+                    saved = await funcs.add_msg_to_history(content=original_file_name,
+                                                           name=file_name,
+                                                           type=attachment.get('file_type'),
+                                                           chat_id=user_id,
                                                            author_id=user_id)
                     if not saved:
                         await logger.error(f'Сообщение от user_id={message.from_user.id} не записан в БД в историю сообщений!')
@@ -373,8 +372,8 @@ async def message_handler(message, state, bot):
         for msg in queue_msgs:
             # Отправляем в JIVO
             result = await funcs.send_to_jivo(
-                text=msg.get('text'), 
-                user_id=user_id, 
+                text=msg.get('text'),
+                user_id=user_id,
                 name=f"{user_full_name}",
                 intent=f"Обращение из телеграм @{bot_info.get_username()}" + (f" https://t.me/{username}" if username else ""),
                 invite=f"Для просмотра истории переписки с пользователем, можете посетить: https://telegram.pokerhub.pro/profile/{user_id}",
@@ -387,7 +386,7 @@ async def message_handler(message, state, bot):
                 saved = await funcs.add_msg_to_history(content=message_text, chat_id=user_id, author_id=user_id)
                 if not saved:
                     await logger.error(f'Сообщение от user_id={message.from_user.id} не записан в БД в историю сообщений!')
-        
+
         # Деактивируем сообщения в jivo_integration_queue если отправили их
         if last_create_at:
             await funcs.deactivate_msgs_for_user(user_id=user_id, end_date=last_create_at)
@@ -411,7 +410,7 @@ async def main():
 
     # запускаем модуль уведомлений после запуска бота
     dp.startup.register(start_notifier)
-    
+
     # Получаем юзернейм бота
     bot_information = await bot.get_me()
     bot_info.set_id(id=bot_information.id)
@@ -423,4 +422,3 @@ async def main():
 
 if __name__ == '__main__':
     asyncio.run(main())
-

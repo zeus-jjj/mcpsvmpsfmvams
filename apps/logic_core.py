@@ -11,7 +11,7 @@ import apps.logger as logger
 from apps.funcs import run_action, send_message, add_history, save_event, close_old_notifications, touch_user_activity
 from apps.notifier import notificator
 from modules import MAP, FSMStates
-# 
+#
 from modules import message_manager
 
 
@@ -44,7 +44,6 @@ async def start(bot, message, persona, msg):
     route = "start"
     user_id = message.from_user.id
     await touch_user_activity(user_id)
-    
     current_map = MAP['start'] if not msg else MAP['callback']
 
     # если для этого сообщения есть данные в json
@@ -68,7 +67,7 @@ async def start(bot, message, persona, msg):
             route = act.get('is_ok', None)
             msg_data = MAP['callback'].get(msg or route, None)
 
- 
+
 
         # проверяем, есть-ли ивент, который нужно записать
         if (event:=msg_data.get("event", None)):
@@ -76,12 +75,12 @@ async def start(bot, message, persona, msg):
     user_data = {"username": message.from_user.username or "unknown", "first_name": message.from_user.first_name or "друг", "last_name": message.from_user.last_name or ""}
     result = await send_message(bot=bot, user_id=user_id, msg_data=msg_data, persona=persona, route=msg or route, user_data=user_data)
 
-    # добавляем отложенное уведомление (не добавится, если уже было добавлено 
+    # добавляем отложенное уведомление (не добавится, если уже было добавлено
     # ранее, либо если для этой личности нет уведомлений)
     if result:
         await message_manager.delete_messages(bot=bot, user_id=user_id)
     if result and (notifications:=msg_data.get('notifications', None)):
-        await notificator.add_notifications(user_id=user_id, 
+        await notificator.add_notifications(user_id=user_id,
             notifications=notifications)
     # возвращаем результат отправки (True/False)
     return result
@@ -99,6 +98,7 @@ async def handle_persona_callback(call, state, bot):
 
 
 
+
     # # ЭКСПЕРИМЕНТАЛЬНЫЙ БЛОК ДЛЯ ЗАКРЫТИЯ ОТЛОЖЕННЫХ УВЕДОМЛЕНИЙ ПРИ УНИКАЛЬНОМ ДЕЙСТВИИ
     # # пока этот блок отключаю (13.10.25), т.к. я буду создавать отложенные уведомления на определенную дату. Если эту часть не закомментить,
     # # то юзеру скорее всего не дойдёт важное отложенное уведомление. С другой стороны, эта часть кода полезна, так как при движениее по
@@ -107,7 +107,7 @@ async def handle_persona_callback(call, state, bot):
 
 
 
-    
+
     # если для этого колбека есть данные в json
     if (msg_data:=MAP['callback'].get(callback_data, None)):
         # если это сообщение нужно удалить (на котором сработала кнопка)
@@ -140,16 +140,16 @@ async def handle_persona_callback(call, state, bot):
         user_data = {"username": call.from_user.username or "unknown", "first_name": call.from_user.first_name or "друг", "last_name": call.from_user.last_name or ""}
         result = await send_message(bot=bot, user_id=user_id, msg_data=msg_data, route=callback_data, user_data=user_data)
 
-        # добавляем отложенное уведомление (не добавится, если уже было добавлено 
+        # добавляем отложенное уведомление (не добавится, если уже было добавлено
         # ранее, либо если для этой личности нет уведомлений)
         if result:
             await message_manager.delete_messages(bot=bot, user_id=user_id)
         if result and (notifications:=msg_data.get('notifications', None)):
-            await notificator.add_notifications(user_id=user_id, 
+            await notificator.add_notifications(user_id=user_id,
                 notifications=notifications)
         if prev:
             # закрываем предыдущее уведомление
-            await notificator.close_notification(user_id=user_id, 
+            await notificator.close_notification(user_id=user_id,
                 label=prev)
 
     # если не найдено поведение для этого колбека
@@ -205,6 +205,6 @@ async def process_fsm(message, state, bot):
                 # останавливаем FSM
                 await state.clear()
 
-""" 
+"""
 
 """

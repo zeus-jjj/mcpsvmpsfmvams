@@ -1,11 +1,10 @@
 import os
 import aiohttp
 from aiogram import Router
-# 
+#
 import apps.logger as logger
 from modules import MAP
 from apps.funcs import send_message, add_history, touch_user_activity
-
 router = Router()
 
 # 401 - нет токена
@@ -31,9 +30,9 @@ async def get_user_data_auth(auth_code):
     try:
         async with aiohttp.ClientSession() as session:
             async with session.post(
-                "https://pokerhub.pro/api/tg/get-tokens", 
-                json={"tokens": [auth_code]}, 
-                headers={'Content-Type': 'application/json; charset=utf-8'}, 
+                "https://pokerhub.pro/api/tg/get-tokens",
+                json={"tokens": [auth_code]},
+                headers={'Content-Type': 'application/json; charset=utf-8'},
                 timeout=30
                 ) as response:
                 user_data = await response.json()
@@ -148,4 +147,3 @@ async def auth_pokerhub(call, bot):
         )
     except Exception as error:
         await logger.error(f"Необработанная ошибка при подтверждении авторизации: {e}")
-

@@ -32,10 +32,10 @@ async def ticket_handler(call, state, bot):
     keyboard.add(InlineKeyboardButton(text='❌', callback_data='not-create-ticket'))
 
     await bot.send_message(
-        chat_id=user_id,
-        text="Введите сообщение, чтобы операторы могли вам помочь",
-        reply_markup=keyboard.as_markup()
-    )
+            chat_id=user_id,
+            text="Введите сообщение, чтобы операторы могли вам помочь",
+            reply_markup=keyboard.as_markup()
+        )
 
 
 @router.callback_query(lambda call: call.data == 'not-create-ticket' and TicketState.CREATE)
@@ -47,7 +47,6 @@ async def remove_ticket_create(call, state):
 
 @router.message(TicketState.CREATE)
 async def create_ticket_handler(message, state, bot):
-    await funcs.touch_user_activity(message.from_user.id)
     await state.set_state(TicketState.ACTIVE)
     body = {
         'user_id': message.from_user.id,
@@ -103,7 +102,6 @@ async def create_ticket_message_handler(message, state, bot):
 @router.callback_query(lambda c: c.data and c.data.startswith('close_ticket-') and TicketState.ACTIVE)
 async def close_ticket(call, state, bot):
 
-    await funcs.touch_user_activity(call.from_user.id)
     await call.answer(text='Закрываю...')
     ticket_id = call.data.replace('close_ticket-','')
 
@@ -135,4 +133,3 @@ async def close_ticket(call, state, bot):
     )
 
     await state.clear()
-
