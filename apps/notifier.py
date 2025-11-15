@@ -14,6 +14,17 @@ from apps.funcs import send_message, run_action, save_event
 from modules import bot
 from apps.bot_info import bot_info
 
+
+def _extract_next_route(action_data):
+    """Возвращает маршрут из action(s), если он указан."""
+    if isinstance(action_data, dict):
+        return action_data.get('is_ok')
+    if isinstance(action_data, list):
+        for action in reversed(action_data):
+            if isinstance(action, dict) and action.get('is_ok'):
+                return action['is_ok']
+    return None
+
 # Настройки Discord
 ds_token = getenv('DS_TOKEN')
 ds_channel = getenv('DS_CHANNEL')
@@ -428,8 +439,10 @@ class SmartNotifier:
                     result = await run_action(action=act, user_id=user_id, bot=bot)
 
             if result:
-                route = act.get('is_ok')
-                msg_data = MAP['callback'].get(route)
+                            next_route = _extract_next_route(act)
+                            if next_route:
+                                route = next_route
+                                msg_data = MAP['callback'].get(route)
 
             # Сохраняем event
             if event := msg_data.get("event"):

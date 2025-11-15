@@ -1,6 +1,3 @@
-"""
-Обработчик для личностей бота
-"""
 import asyncio
 #
 from aiogram import Router
@@ -13,6 +10,17 @@ from apps.notifier import notificator
 from modules import MAP, FSMStates
 #
 from modules import message_manager
+
+
+def _extract_next_route(action_data):
+    """Возвращает целевой маршрут из action(s), если он указан."""
+    if isinstance(action_data, dict):
+        return action_data.get('is_ok')
+    if isinstance(action_data, list):
+        for action in reversed(action_data):
+            if isinstance(action, dict) and action.get('is_ok'):
+                return action['is_ok']
+    return None
 
 
 router = Router()
@@ -63,9 +71,11 @@ async def start(bot, message, persona, msg):
                 await logger.error(f"Ошибка в типе данных action(s)! Должен быть list/dict, а передан {type(act)}!")
         # Если результат выполнения action(s) положительный, то закроем уведомление и подменим данные сообщения
         if result:
-            # если True, то подменяем данные для ответа и маршрут
-            route = act.get('is_ok', None)
-            msg_data = MAP['callback'].get(msg or route, None)
+                    # если True, то подменяем данные для ответа и маршрут
+                    next_route = _extract_next_route(act)
+                    if next_route:
+                        route = next_route
+                        msg_data = MAP['callback'].get(msg or route, None)
 
 
 
@@ -129,9 +139,11 @@ async def handle_persona_callback(call, state, bot):
                 await logger.error(f"Ошибка в типе данных action(s)! Должен быть list/dict, а передан {type(act)}!")
         # Если результат выполнения action(s) положительный, то закроем уведомление и подменим данные сообщения
         if result:
-            # если True, то подменяем данные для ответа и маршрут
-            prev = act.get('is_ok', None)
-            msg_data = MAP['callback'].get(act['is_ok'], None)
+                    # если True, то подменяем данные для ответа и маршрут
+                    next_route = _extract_next_route(act)
+                    if next_route:
+                        prev = next_route
+                        msg_data = MAP['callback'].get(next_route, None)
 
         # проверяем, есть-ли ивент, который нужно записать
         if (event:=msg_data.get("event", None)):
