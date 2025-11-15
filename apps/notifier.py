@@ -192,38 +192,58 @@ class SmartNotifier:
         await db.close()
 
     async def add_notifications(self, user_id: int, notifications: list):
-       """Добавляет уведомления с проверкой активности и воронки"""
-       db = await create_connect()
+        """
+        Добавляет уведомления с проверкой статуса пользователя.
 
-       # Проверяем статус пользователя
-       user_status = await db.fetchrow("""
-           SELECT
-               u.timestamp_registration,
-               -- Проверяем, зарегистрирован ли на курсе
-               (SELECT COUNT(*) FROM events
-                WHERE user_id = $1
-                AND event_type = 'course_registration') as is_registered,
-               -- Проверяем, в воронке ли пользователь курса
-               (SELECT COUNT(*) FROM user_funnel
-                WHERE user_id = $1
-                AND (label LIKE '%course%' OR label LIKE '%spin%'
-                     OR label LIKE '%mtt%' OR label LIKE '%cash%')) as in_course_funnel,
-               -- Последняя активность
-               COALESCE(
-                   u.last_activity,
-                   (SELECT MAX(timestamp) FROM user_history WHERE user_id = $1)
-               ) as last_activity
-           FROM users u
-           WHERE u.id = $1
-       """, user_id)
+        ЛОГИКА:
+        1. Зарегистрированные пользователи → НЕ получают догрев, получают обычные уведомления
+        2. Незарегистрированные НЕ в воронке курса → получают догрев
+        3. Незарегистрированные В воронке курса → получают обычные уведомления (без догрева)
+        """
+        db = await create_connect()
 
-       if user_status:
-           # ДОГРЕВОЧНЫЕ УВЕДОМЛЕНИЯ: Если НЕ в воронке курса И НЕ зарегистрирован
-           if user_status['in_course_funnel'] == 0 and user_status['is_registered'] == 0:
-               await self._add_warmup_notifications(user_id, db)
+        # Проверяем статус пользователя
+        user_status = await db.fetchrow("""
+            SELECT
+                u.timestamp_registration,
+                -- Проверяем, зарегистрирован ли на курсе
+                (SELECT COUNT(*) FROM events
+                 WHERE user_id = $1
+                 AND event_type = 'course_registration') as is_registered,
+                -- Проверяем, в воронке ли пользователя курса
+                (SELECT COUNT(*) FROM user_funnel
+                 WHERE user_id = $1
+                 AND (label LIKE '%course%' OR label LIKE '%spin%'
+                      OR label LIKE '%mtt%' OR label LIKE '%cash%')) as in_course_funnel,
+                -- Последняя активность
+                COALESCE(
+                    u.last_activity,
+                    (SELECT MAX(timestamp) FROM user_history WHERE user_id = $1)
+                ) as last_activity
+            FROM users u
+            WHERE u.id = $1
+        """, user_id)
 
-        # Добавляем обычные уведомления
-           for notification in notifications:
+        if user_status:
+            # ДОГРЕВОЧНЫЕ УВЕДОМЛЕНИЯ:
+            # Только если НЕ в воронке курса И НЕ зарегистрирован
+            should_add_warmup = (
+                user_status['in_course_funnel'] == 0 and
+                user_status['is_registered'] == 0
+            )
+
+            if should_add_warmup:
+                await self._add_warmup_notifications(user_id, db)
+            else:
+                await logger.info(
+                    f"Пользователь {user_id}: "
+                    f"зарегистрирован={user_status['is_registered']}, "
+                    f"в_воронке={user_status['in_course_funnel']} "
+                    f"→ догрев НЕ добавляем, обычные уведомления ДОБАВЛЯЕМ"
+                )
+
+        # Добавляем ОБЫЧНЫЕ уведомления (для всех, независимо от статуса)
+        for notification in notifications:
             label = notification.get('message')
             wait = notification.get('at_time')
 
@@ -244,10 +264,14 @@ class SmartNotifier:
                     ON CONFLICT (user_id, label) DO NOTHING
                 """, user_id, send_time, label, True)
 
-           await db.close()
+        await db.close()
+
 
     async def _add_warmup_notifications(self, user_id: int, db):
-        """Добавляет догревочные уведомления для незарегистрированных пользователей"""
+        """
+        Добавляет догревочные уведомления ТОЛЬКО для незарегистрированных
+        пользователей, которые НЕ находятся в воронке курса
+        """
         # Проверяем существующие догревочные уведомления
         existing = await db.fetchrow("""
             SELECT COUNT(*) as cnt FROM notifications
@@ -258,7 +282,7 @@ class SmartNotifier:
             await logger.info(f"У пользователя {user_id} уже есть догревочные уведомления")
             return
 
-        # ВАЖНО: Проверяем, что пользователь НЕ зарегистрирован
+        # КРИТИЧЕСКИ ВАЖНО: Проверяем, что пользователь НЕ зарегистрирован
         is_registered = await db.fetchrow("""
             SELECT COUNT(*) as cnt FROM events
             WHERE user_id = $1 AND event_type = 'course_registration'
@@ -268,9 +292,21 @@ class SmartNotifier:
             await logger.info(f"Пользователь {user_id} зарегистрирован, догрев не нужен")
             return
 
+        # Проверяем, что пользователь НЕ в воронке курса
+        in_course_funnel = await db.fetchrow("""
+            SELECT COUNT(*) as cnt FROM user_funnel
+            WHERE user_id = $1
+            AND (label LIKE '%course%' OR label LIKE '%spin%'
+                 OR label LIKE '%mtt%' OR label LIKE '%cash%')
+        """, user_id)
+
+        if in_course_funnel and in_course_funnel['cnt'] > 0:
+            await logger.info(f"Пользователь {user_id} уже в воронке курса, догрев не нужен")
+            return
+
         await logger.info(f"Добавляем догревочные уведомления для пользователя {user_id}")
 
-        # Серия догревочных сообщений
+        # Серия догревочных сообщений (ТОЛЬКО для незарегистрированных)
         warmup_messages = [
             {"label": "warmup_why_poker", "days": 1, "time": "10:00"},
             {"label": "warmup_success_stories", "days": 2, "time": "14:00"},
@@ -295,6 +331,7 @@ class SmartNotifier:
                 VALUES ($1, $2, $3, $4)
                 ON CONFLICT DO NOTHING
             """, user_id, send_time, msg['label'], True)
+
 
     def _calculate_send_time(self, wait):
         """Вычисляет время отправки уведомления"""
