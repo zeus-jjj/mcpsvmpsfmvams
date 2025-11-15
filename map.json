@@ -488,6 +488,9 @@
             "action": {
                 "func": "check_pokerhub",
                 "is_ok": "is_ph_registered_cash"
+            }
+        },
+        "is_ph_registered_cash": {
                 "is_ph_registered_cash": {
                             "text": "Вы зарегистрировались на обучение по дисциплине Cash. Мы создали ваш личный кабинет на платформе PokerHUB ↓",
                             "user_history": "Зарегистрировался на PokerHub CASH",
@@ -657,7 +660,7 @@
                 "is_ok": "is_ph_registered_mtt"
             }
         },
-        is_ph_registered_mtt": {
+        "is_ph_registered_mtt": {
                     "text": "Вы зарегистрировались на обучение по дисциплине MTT. Мы создали ваш личный кабинет на платформе PokerHUB ↓",
                     "user_history": "Зарегистрировался на PokerHub MTT",
                     "event": "course_registration",
@@ -2352,4 +2355,5 @@
             ]
         }
     }
+}
 }
