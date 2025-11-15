@@ -16,7 +16,7 @@ from aiogram.types import ReplyKeyboardRemove
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.base import StorageKey
 from cryptography.fernet import Fernet
-# 
+#
 from apps import bot_info
 import apps.logger as logger
 import apps.file_id_uploader as file_uploader
@@ -38,8 +38,11 @@ bot_lead_stages = {
     "quiz_free_learning" : "2-free learn",
     "closed_community" : "3-zs",
     "spin" : "4-spin",
+    "4-spin": "4-spin",
     "mtt" : "4-mtt",
+    "4-mtt": "4-mtt",
     "cash" : "4-cash",
+    "4-cash": "4-cash",
     "is_ph_registered_spin": "5-spin",
     "is_ph_registered_mtt": "5-mtt",
     "is_ph_registered_cash": "5-cash",
@@ -100,7 +103,7 @@ async def add_msg_to_jivo_integration_queue(user_id, text):
     Для добавления сообщения в jivo_integration_queue.
     Задача от Академика:
     Сейчас когда ПХ шлет "тригерное сообщение" игроку, мы его в Jivo видим как новый чат.
-    Можно сделать так, чтобы мы этого не видели? 
+    Можно сделать так, чтобы мы этого не видели?
     Т.е. новый чат-диалог создавался только в случае если человек ответил нам?
     """
     db = await create_connect()
@@ -177,7 +180,7 @@ async def send_to_jivo(user_id, text=None, file_type=None, file_path=None, file_
         if not text and not file_path:
             await logger.error(f"Нет данных для отправки сообщения! Данные: {data}")
             return None
-        
+
         # Добавляем параметры из kwargs
         data['sender'].update(kwargs)
 
@@ -265,7 +268,7 @@ async def close_old_notifications(user_id, callback):
         user_id,
         callback
     )
-    
+
     if row:
         # значит он перешёл на сообщение на котором уже был
         await logger.debug(f"Юзер {user_id} уже был на сообщении {callback} ранее")
@@ -281,7 +284,7 @@ async def close_old_notifications(user_id, callback):
             user_id
         )
     await db.close()
-    
+
 async def get_quiz_results(bot, user_id):
     import mysql.connector
     from modules import MYSQL_CONFIG
@@ -290,7 +293,7 @@ async def get_quiz_results(bot, user_id):
     cursor = conn.cursor()
     select_query = """
     SELECT iq_score FROM quiz_sessions WHERE telegram_id = %s
-    ORDER BY id DESC 
+    ORDER BY id DESC
     LIMIT 1
     """
     get_scores = False
@@ -494,7 +497,7 @@ async def placeholders_replace(data, user_id, user_data):
             data = data.format(crypted_user_id = await encrypt_message(message=user_id))
         if "{user_id}" in data:
             data = data.format(user_id = user_id)
-        
+
         # тут добавляем всевозможные значения, которые будем пытаться подставить в строку сообщения
         placeholders = SafeDict(**user_data)
         # объявляем объекты для сообщения
@@ -559,7 +562,7 @@ async def send_amo(bot, user_id):
             collected_data.update(data.get('addition_data', {}))
 
             # создание/обновление заявки
-            lead_id = await amo_leads.process_lead(data=collected_data, 
+            lead_id = await amo_leads.process_lead(data=collected_data,
                 lead_id=data.get("lead_id", None))
 
             # если успешно создана/обновлена заявка
@@ -686,7 +689,7 @@ async def run_action(action, user_id, bot):
 
 # общая функция для отправки сообщения
 async def send_message(bot, user_id, msg_data, persona="default", route="start", user_data={}, notification=False):
-    
+
     text = msg_data.get("text", None)
     # user_data отсутствует, если сообщение отправляется как отложенное уведомление
     if not user_data:
@@ -706,9 +709,9 @@ async def send_message(bot, user_id, msg_data, persona="default", route="start",
     filename = None
 
     if type(files) == list and len(files) > 0:
-        
+
         files_group = files
-    
+
     # проверяем, есть-ли файл для отправки
     elif type(file) == dict:
         # путь к отправляемому файлу
@@ -732,7 +735,7 @@ async def send_message(bot, user_id, msg_data, persona="default", route="start",
         keyboard = ReplyKeyboardRemove()
 
     """
-    bot=экземпляр бота 
+    bot=экземпляр бота
     chat_id=id чата куда отправить
     label=метка для записи в БД, чтобы по ней ориентироваться в файлах
     filepath=путь к файлу
@@ -745,12 +748,12 @@ async def send_message(bot, user_id, msg_data, persona="default", route="start",
     # если есть файл, который нужно отправить, то отправляем через эту функцию
     if (file and file_path) or files_group:
         result = await file_uploader.send_file_by_label(
-            bot=bot, 
-            chat_id=user_id, 
-            label=persona, 
-            filepath=file_path, 
+            bot=bot,
+            chat_id=user_id,
+            label=persona,
+            filepath=file_path,
             files_group = files_group,
-            text=text, 
+            text=text,
             thumbnail_path=thumbnail_path,
             filename=filename,
             content_type=content_type,
@@ -779,10 +782,10 @@ async def send_message(bot, user_id, msg_data, persona="default", route="start",
         await save_funnel_history(user_id=user_id, label=route)
         # записываем/обновляем продвижение юзера по воронке бота (тут только уникальные переходы)
         await save_user_funnel(user_id=user_id, label=route)
-    
+
     if notification and result and (notifications:=msg_data.get('notifications', None)):
         from apps.notifier import notificator
-        await notificator.add_notifications(user_id=user_id, 
+        await notificator.add_notifications(user_id=user_id,
             notifications=notifications)
 
     # возвращаем результат отправки (True/False)
