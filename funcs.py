@@ -28,7 +28,6 @@ import apps.amo_leads as amo_leads
 # получаем ключ из переменных окружения
 key_b64 = get_key_b64()
 
-# словарь соответствий этапов воронки бота
 bot_lead_stages = {
     "default": "1-start",
     "start": "1-start",
@@ -47,9 +46,9 @@ bot_lead_stages = {
     "is_ph_registered_mtt": "5-mtt",
     "is_ph_registered_cash": "5-cash",
     "course_manager" : "6-wlcm",
-    "notif_stat": "7-wlcmd",
-    "notif_cousre_1" : "8-fld",
-    "notif_cousre_2": "9-fld",
+    "7-wlcmd": "7-wlcmd",
+    "8-fld": "8-fld",
+    "9-fld": "9-fld",
     "iq_quiz": "1-quizstart",
     "iq_quiz_results": "2-res",
     "notif_iq_quiz": "3-quizd",
@@ -80,7 +79,12 @@ bot_lead_stages = {
     "spinquiz21":"2.1-spinquiz",
     "spinquiz22":"2.2-spinquiz",
     "spinquiz23":"2.3-spinquiz",
-    "spinquiz":"1-spinquiz"
+    "spinquiz":"1-spinquiz",
+
+    "11-fld": "11-fld",
+    "12-fld": "12-fld",
+    "1.4-case": "1.4-case",
+    "4.1-cash": "4.1-cash",
 }
 
 # этот класс нужен для безопасного использования format, чтобы не возникали исключения
