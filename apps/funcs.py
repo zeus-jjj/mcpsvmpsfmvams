@@ -76,11 +76,24 @@ bot_lead_stages = {
     "vk_iq_quiz_results": "получил результаты iq-теста по вк-воронке",
     "gift_iq_result": "получил в подарок бесплатный доступ к курсам",
     "get_iq_result": "получил результат iq-теста (ВК-ветка)",
-    "select_quiz": "1-selectquiz",
     "spinquiz21":"2.1-spinquiz",
     "spinquiz22":"2.2-spinquiz",
-    "spinquiz23":"2.3-spinquiz"
-}
+    "spinquiz23":"2.3-spinquiz",
+    "spinquiz":"1-spinquiz",
+
+    "11-fld": "11-fld",
+    "12-fld": "12-fld",
+    "1.4-case": "1.4-case",
+    "4.1-cash": "4.1-cash",
+    "doge2_1": "doge2.1",
+    "doge2_program": "doge2.2",
+    "doge2_format": "doge2.3",
+    "doge2_link_request": "doge2.4",
+    "doge2_link_ready": "doge2.4-link",
+    "doge2_username_prompt": "doge2.5",
+    "doge2_username_done": "doge2.5-done",
+    "doge2_followup_program": "doge2.6",
+    "doge2_followup_cases": "doge2.7",
 
 # этот класс нужен для безопасного использования format, чтобы не возникали исключения
 # в случаях, когда плейсхолдера переданного в параметры format() в строке нет

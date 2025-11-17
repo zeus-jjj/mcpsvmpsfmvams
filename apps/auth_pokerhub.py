@@ -3,7 +3,6 @@ import aiohttp
 from aiogram import Router
 #
 import apps.logger as logger
-from modules import MAP
 from apps.funcs import send_message, add_history, touch_user_activity
 router = Router()
 

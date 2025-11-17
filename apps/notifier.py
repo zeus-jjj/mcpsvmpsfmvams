@@ -6,9 +6,10 @@ import time
 from collections import defaultdict
 from os import getenv
 from datetime import datetime, timedelta
+from typing import Dict, Tuple
 from aiohttp import ClientSession
 
-from modules import MAX_CHARS_USERS_HISTORY, MAP, create_connect
+from modules import DEFAULT_FUNNEL, MAX_CHARS_USERS_HISTORY, create_connect, get_funnel
 import apps.logger as logger
 from apps.funcs import send_message, run_action, save_event
 from modules import bot
@@ -25,6 +26,7 @@ def _extract_next_route(action_data):
                 return action['is_ok']
     return None
 
+
 # Настройки Discord
 ds_token = getenv('DS_TOKEN')
 ds_channel = getenv('DS_CHANNEL')
@@ -37,7 +39,7 @@ headers = {
 class SmartNotifier:
     def __init__(self):
         self.bot = bot
-        self.MESSAGES = MAP
+        self._notification_funnels: Dict[Tuple[int, str], str] = {}
 
         # Настройки активности
         self.INACTIVITY_THRESHOLD_DAYS = 45  # 1.5 месяца
@@ -202,7 +204,28 @@ class SmartNotifier:
 
         await db.close()
 
-    async def add_notifications(self, user_id: int, notifications: list):
+    def _remember_notification_funnel(self, user_id: int, label: str, funnel_name: str | None):
+        if not user_id or not label:
+            return
+        self._notification_funnels[(user_id, label)] = (funnel_name or DEFAULT_FUNNEL).lower()
+
+    def _drop_notification_funnel(self, user_id: int | None, label: str | None):
+        if not user_id or not label:
+            return
+        self._notification_funnels.pop((user_id, label), None)
+
+    def _resolve_notification_funnel(self, notification) -> str:
+        user_id = notification.get('user_id')
+        label = notification.get('label')
+        cached = self._notification_funnels.get((user_id, label))
+        if cached:
+            return cached
+        fallback = notification.get('funnel_name') or DEFAULT_FUNNEL
+        if fallback != DEFAULT_FUNNEL:
+            self._remember_notification_funnel(user_id, label, fallback)
+        return fallback
+
+    async def add_notifications(self, user_id: int, notifications: list, funnel_name: str = DEFAULT_FUNNEL):
         """
         Добавляет уведомления с проверкой статуса пользователя.
 
@@ -211,6 +234,7 @@ class SmartNotifier:
         2. Незарегистрированные НЕ в воронке курса → получают догрев
         3. Незарегистрированные В воронке курса → получают обычные уведомления (без догрева)
         """
+        funnel_name = (funnel_name or DEFAULT_FUNNEL).lower()
         db = await create_connect()
 
         # Проверяем статус пользователя
@@ -244,7 +268,7 @@ class SmartNotifier:
             )
 
             if should_add_warmup:
-                await self._add_warmup_notifications(user_id, db)
+                await self._add_warmup_notifications(user_id, db, funnel_name)
             else:
                 await logger.info(
                     f"Пользователь {user_id}: "
@@ -257,6 +281,7 @@ class SmartNotifier:
         for notification in notifications:
             label = notification.get('message')
             wait = notification.get('at_time')
+            notification_funnel = (notification.get('funnel') or funnel_name or DEFAULT_FUNNEL).lower()
 
             # Вычисляем время отправки
             send_time = self._calculate_send_time(wait)
@@ -275,10 +300,11 @@ class SmartNotifier:
                     ON CONFLICT (user_id, label) DO NOTHING
                 """, user_id, send_time, label, True)
 
+            self._remember_notification_funnel(user_id, label, notification_funnel)
+
         await db.close()
 
-
-    async def _add_warmup_notifications(self, user_id: int, db):
+    async def _add_warmup_notifications(self, user_id: int, db, funnel_name: str):
         """
         Добавляет догревочные уведомления ТОЛЬКО для незарегистрированных
         пользователей, которые НЕ находятся в воронке курса
@@ -342,7 +368,7 @@ class SmartNotifier:
                 VALUES ($1, $2, $3, $4)
                 ON CONFLICT DO NOTHING
             """, user_id, send_time, msg['label'], True)
-
+            self._remember_notification_funnel(user_id, msg['label'], funnel_name)
 
     def _calculate_send_time(self, wait):
         """Вычисляет время отправки уведомления"""
@@ -398,7 +424,7 @@ class SmartNotifier:
         await db.close()
         return notifications
 
-    async def close_notification(self, notification_id=None, user_id=None, label=None):
+    async def close_notification(self, notification_id=None, user_id=None, label=None, funnel_name: str | None = None):
         """Закрывает уведомление"""
         db = await create_connect()
         if notification_id:
@@ -412,20 +438,33 @@ class SmartNotifier:
                 WHERE user_id = $2 AND label = $3 AND is_active = $4
             """, False, user_id, label, True)
         await db.close()
+        if user_id and label:
+            self._drop_notification_funnel(user_id, label)
 
     async def send_notification(self, notification):
         """Отправляет уведомление пользователю"""
         try:
             user_id = notification.get('user_id')
-            msg_data = self.MESSAGES["callback"].get(notification.get('label'))
+            label = notification.get('label')
+            funnel_name = self._resolve_notification_funnel(notification)
+            funnel_map = get_funnel(funnel_name)
+            msg_data = funnel_map["callback"].get(label)
 
             if msg_data is None:
-                await self.close_notification(user_id=user_id, label=notification.get('label'))
+                await logger.error(
+                    f"Не найдено сообщение '{label}' для воронки '{funnel_name}', закрываю уведомление"
+                )
+                await self.close_notification(user_id=user_id, label=label, funnel_name=funnel_name)
                 return
 
             # Проверяем давность уведомления
             if int(time.time()) - notification.get('time_to_send') > 172800:  # 2 дня
-                await self.close_notification(notification_id=notification.get('id'))
+                await self.close_notification(
+                    notification_id=notification.get('id'),
+                    user_id=user_id,
+                    label=label,
+                    funnel_name=funnel_name,
+                )
                 await logger.info("Уведомление устарело и закрыто")
                 return
 
@@ -439,17 +478,22 @@ class SmartNotifier:
                     result = await run_action(action=act, user_id=user_id, bot=bot)
 
             if result:
-                            next_route = _extract_next_route(act)
-                            if next_route:
-                                route = next_route
-                                msg_data = MAP['callback'].get(route)
+                next_route = _extract_next_route(act)
+                if next_route:
+                    route = next_route
+                    msg_data = funnel_map['callback'].get(route)
 
             # Сохраняем event
             if event := msg_data.get("event"):
                 await save_event(user_id=user_id, event=event)
 
             if not msg_data:
-                await self.close_notification(notification_id=notification.get('id'))
+                await self.close_notification(
+                    notification_id=notification.get('id'),
+                    user_id=user_id,
+                    label=label,
+                    funnel_name=funnel_name,
+                )
                 return
 
             # Отправляем сообщение
@@ -458,15 +502,25 @@ class SmartNotifier:
                     bot=self.bot,
                     user_id=user_id,
                     msg_data=msg_data,
-                    route=notification.get('label')
+                    route=notification.get('label'),
+                    funnel_name=funnel_name,
                 )
 
                 if sending:
                     # Добавляем новые уведомления если есть
                     if new := msg_data.get("notifications"):
-                        await self.add_notifications(user_id=user_id, notifications=new)
+                        await self.add_notifications(
+                            user_id=user_id,
+                            notifications=new,
+                            funnel_name=funnel_name,
+                        )
 
-                    await self.close_notification(notification_id=notification.get('id'))
+                    await self.close_notification(
+                        notification_id=notification.get('id'),
+                        user_id=user_id,
+                        label=label,
+                        funnel_name=funnel_name,
+                    )
                     await logger.info(f"Уведомление {notification.get('id')} отправлено")
 
                     # Сохраняем в историю
@@ -478,7 +532,11 @@ class SmartNotifier:
                     await db.close()
 
             elif new := msg_data.get("notifications"):
-                await self.add_notifications(user_id=user_id, notifications=new)
+                await self.add_notifications(
+                    user_id=user_id,
+                    notifications=new,
+                    funnel_name=funnel_name,
+                )
 
         except Exception as error:
             await logger.error(f"Ошибка отправки уведомления: {error}")

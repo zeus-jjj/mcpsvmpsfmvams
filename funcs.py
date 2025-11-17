@@ -20,8 +20,18 @@ from cryptography.fernet import Fernet
 from apps import bot_info
 import apps.logger as logger
 import apps.file_id_uploader as file_uploader
-from modules import MAX_CHARS_USERS_HISTORY, create_connect, get_key_b64, FSMStates, dp, headers, get_host
-from modules import JIVO_INTEGRATOR_URL
+from modules import (
+    DEFAULT_FUNNEL,
+    FSMStates,
+    JIVO_INTEGRATOR_URL,
+    MAX_CHARS_USERS_HISTORY,
+    create_connect,
+    dp,
+    get_host,
+    get_key_b64,
+    headers,
+    get_user_funnel,
+)
 # для заявки АМО
 import apps.amo_leads as amo_leads
 
@@ -85,7 +95,15 @@ bot_lead_stages = {
     "12-fld": "12-fld",
     "1.4-case": "1.4-case",
     "4.1-cash": "4.1-cash",
-}
+    "doge2_1": "doge2.1",
+    "doge2_program": "doge2.2",
+    "doge2_format": "doge2.3",
+    "doge2_link_request": "doge2.4",
+    "doge2_link_ready": "doge2.4-link",
+    "doge2_username_prompt": "doge2.5",
+    "doge2_username_done": "doge2.5-done",
+    "doge2_followup_program": "doge2.6",
+    "doge2_followup_cases": "doge2.7",
 
 # этот класс нужен для безопасного использования format, чтобы не возникали исключения
 # в случаях, когда плейсхолдера переданного в параметры format() в строке нет
@@ -692,7 +710,16 @@ async def run_action(action, user_id, bot):
     return result if not action.get("reverse_result", False) else not result
 
 # общая функция для отправки сообщения
-async def send_message(bot, user_id, msg_data, persona="default", route="start", user_data={}, notification=False):
+async def send_message(
+    bot,
+    user_id,
+    msg_data,
+    persona="default",
+    route="start",
+    user_data={},
+    notification=False,
+    funnel_name: str | None = None,
+):
 
     text = msg_data.get("text", None)
     # user_data отсутствует, если сообщение отправляется как отложенное уведомление
@@ -787,10 +814,14 @@ async def send_message(bot, user_id, msg_data, persona="default", route="start",
         # записываем/обновляем продвижение юзера по воронке бота (тут только уникальные переходы)
         await save_user_funnel(user_id=user_id, label=route)
 
+    resolved_funnel = (funnel_name or get_user_funnel(user_id) or DEFAULT_FUNNEL)
     if notification and result and (notifications:=msg_data.get('notifications', None)):
-        from apps.notifier import notificator
-        await notificator.add_notifications(user_id=user_id,
-            notifications=notifications)
+            from apps.notifier import notificator
+            await notificator.add_notifications(
+                user_id=user_id,
+                notifications=notifications,
+                funnel_name=resolved_funnel,
+            )
 
-    # возвращаем результат отправки (True/False)
+        # возвращаем результат отправки (True/False)
     return result

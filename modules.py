@@ -1,4 +1,6 @@
 import re
+from contextvars import ContextVar
+from pathlib import Path
 from os.path import join
 from os import getenv
 from aiogram.types import FSInputFile
@@ -8,9 +10,9 @@ import base64
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram import Dispatcher
-# 
+#
 from aiogram import Bot
-# 
+#
 from apps.msg_deleter import MessageManager
 
 # Это для iq-квиза
@@ -18,15 +20,67 @@ ENCRYPTION_KEY = b'jkb342j3b98u32hrh98ewhfroi3u98r0'  # 32 байта для AES
 ENCRYPTION_IV = b'sdkjg09843j092jf'  # 16 байт
 # Конфигурация MySQL
 MYSQL_CONFIG = {
-            'host': 'realifod.beget.tech',
-            'user': 'realifod_iq_hub',
-            'password': 'Mvh54g2y',
-            'database': 'realifod_iq_hub'
+    'host': 'realifod.beget.tech',
+    'user': 'realifod_iq_hub',
+    'password': 'Mvh54g2y',
+    'database': 'realifod_iq_hub'
 }
 
 
-# грузим данные из файла шаблонов текста для сообщений
-MAP = loads(open('map.json', 'r', encoding='utf-8').read())
+FUNNELS_DIR = Path("funnels")
+FALLBACK_MAP_PATH = Path("map.json")
+
+
+def _load_funnels() -> dict:
+    funnels: dict[str, dict] = {}
+
+    if FUNNELS_DIR.exists() and FUNNELS_DIR.is_dir():
+        for funnel_file in sorted(FUNNELS_DIR.glob("*.json")):
+            try:
+                funnels[funnel_file.stem] = loads(
+                    funnel_file.read_text(encoding="utf-8")
+                )
+            except Exception:
+                continue
+
+    if not funnels and FALLBACK_MAP_PATH.exists():
+        funnels["default"] = loads(
+            FALLBACK_MAP_PATH.read_text(encoding="utf-8")
+        )
+
+    return funnels
+
+
+FUNNELS = _load_funnels()
+_current_funnel: ContextVar[str] = ContextVar(
+    "current_funnel",
+    default="default" if "default" in FUNNELS else next(iter(FUNNELS), "default"),
+)
+
+
+def available_funnels() -> tuple[str, ...]:
+    return tuple(FUNNELS.keys())
+
+
+def set_current_funnel(name: str) -> None:
+    if name not in FUNNELS:
+        raise KeyError(name)
+    _current_funnel.set(name)
+
+
+def get_funnel(name: str | None = None) -> dict:
+    target = name or _current_funnel.get()
+    if target not in FUNNELS:
+        raise KeyError(target)
+    return FUNNELS[target]
+
+
+try:
+    MAP = get_funnel("default" if "default" in FUNNELS else None)
+except KeyError:
+    MAP = {}
+
+DEFAULT_FUNNEL = "default"
 
 # Токен доступа к локальной ragflow
 ragflow_token = getenv("ragflow_token")
@@ -59,14 +113,17 @@ dp = Dispatcher(storage=storage)
 # Инициализируем менеджер сообщений
 message_manager = MessageManager()
 
+
 def get_host() -> str:
     return "http://localhost:3095/api"
     # return 'http://94.130.236.66:3095/api' if name == 'nt' else 'https://telegram.pokerhub.pro/api'
+
 
 def get_key_b64() -> str:
     # ключ для шифрования id юзера для покерхаб
     key_b64 = base64.urlsafe_b64encode(getenv('CRYPT_KEY').encode())
     return key_b64
+
 
 def get_static(file_name: str) -> FSInputFile:
     return FSInputFile(path=join(getenv('static_folder'), 'messages', file_name))
@@ -101,6 +158,7 @@ def get_data(payload: str) -> dict:
 
     return data
 
+
 # для соединения с БД
 async def create_connect():
     return await asyncpg.connect(
@@ -110,6 +168,7 @@ async def create_connect():
         user=getenv('db_user'),
         password=getenv('db_password')
     )
+
 
 # регистрируем универсальное состояние для сообщений
 class FSMStates(StatesGroup):

@@ -5,7 +5,14 @@ import asyncio
 from aiogram import types, Router
 from aiogram.filters.command import Command
 from aiogram.filters import ChatMemberUpdatedFilter, KICKED, MEMBER
-from modules import get_data, create_connect, bot, dp, MAP
+from modules import (
+    DEFAULT_FUNNEL,
+    bot,
+    create_connect,
+    dp,
+    get_data,
+    set_current_funnel,
+)
 #
 from json import loads, JSONDecodeError
 
@@ -28,7 +35,6 @@ from apps.select_quiz import quiz_results as select_quiz_results
 from apps.notifier import notificator
 
 
-
 router = Router()
 
 
@@ -41,10 +47,11 @@ async def process_user_blocked_bot(event: types.ChatMemberUpdated):
         """INSERT INTO funnel_history (user_id, label)
             VALUES ($1, $2)""",
         event.from_user.id, "Заблокировал бота"
-        )
+    )
     await db.close()
     await notificator.blocked(user_id=event.from_user.id, is_blocked=True)
     await funcs.touch_user_activity(event.from_user.id)
+
 
 # вызывается, когда юзер разблокировал бота
 @dp.my_chat_member(ChatMemberUpdatedFilter(member_status_changed=MEMBER))
@@ -55,13 +62,12 @@ async def user_unblocked_bot(event: types.ChatMemberUpdated):
         """INSERT INTO funnel_history (user_id, label)
             VALUES ($1, $2)""",
         event.from_user.id, "Разблокировал бота"
-        )
+    )
     await db.close()
     await notificator.blocked(user_id=event.from_user.id, is_blocked=False)
 
     # ДОБАВЛЕНО: Возобновляем уведомления при разблокировке
     await notificator.resume_user_notifications(event.from_user.id)
-
 
 
 # для теста авторизации на ПХ
@@ -76,9 +82,6 @@ async def process_start_command(message: types.Message, bot):
     except Exception as error:
         await logger.error(f"Не удалось извлечь метки из ссылки: {raw_data} у пользователя с id={message.from_user.id}!")
         data = {}
-
-
-
 
     # ВРЕМЕННЫЙ КОСТЫЛЬ ДЛЯ СОВМЕСТИМОСТИ СО СТАРЫМИ МЕТКАМИ, УДАЛИТ 13.10.2025 ЭТОТ БЛОК И ОТПИСАТЬ В КОНФУ
     platform = data.get("platform")
@@ -95,8 +98,7 @@ async def process_start_command(message: types.Message, bot):
         # content
         data['co'] = content
 
-
-
+    funnel_name = (data.get("fn") or DEFAULT_FUNNEL).lower()
 
     # Если есть, значит бота запустили с целью авторизации на ПХ
     auth_code = data.get('auth', None)
@@ -110,6 +112,7 @@ async def process_start_command(message: types.Message, bot):
     msg = data.get("msg", None)
 
     user_id = message.from_user.id
+    set_current_funnel(funnel_name)
     await logger.info(f"Бот запущен пользователем {message.from_user.username}, id={user_id}, data={data}")
 
     db = await create_connect()
@@ -147,7 +150,6 @@ async def process_start_command(message: types.Message, bot):
             user_id, message.from_user.username or "Unknown",
             message.from_user.last_name, message.from_user.first_name, avatar
         )
-
 
     # если он есть, значит запускал бота
     if existing_user:
@@ -218,7 +220,6 @@ async def process_start_command(message: types.Message, bot):
     await db.close()
     await funcs.touch_user_activity(user_id)
 
-
     # если был передан параметр для авторизации на покерхаб
     if auth_code:
         await auth_pokerhub.start_auth(bot=bot, message=message, auth_code=auth_code)
@@ -240,9 +241,13 @@ async def process_start_command(message: types.Message, bot):
     # Это раньше тут подключалась воронка по файлу map.json с персонами
     else:
         # пробуем подключить нужную персону, если переданы нужные метки
-        await logic_core.start(bot=bot, message=message, persona=data.get("ca", None), msg=msg)
-
-
+        await logic_core.start(
+            bot=bot,
+            message=message,
+            persona=data.get("ca", None),
+            msg=msg,
+            funnel_name=funnel_name,
+        )
 
 
 # обработчик всех сообщений (для создания или дополнения тикета)
@@ -261,19 +266,18 @@ async def message_handler(message, state, bot):
 
     # Айди юзеров, которые могут общаться с ИИ
     # Пока-что хардкод, со списком айдишек юзеров. Потом автоматика должна определять, куда слать сообщения
-    ai_access = [] # [542149705, 5762455571]
+    ai_access = []  # [542149705, 5762455571]
     if user_id in ai_access:
         dialogue_type = "ai"
     else:
         dialogue_type = "support"
-
 
     # Если сообщение должно идти в ИИ-ассистента
     if dialogue_type == "ai":
         sent_message = await bot.send_message(user_id, "🤔")
         message_id = sent_message.message_id
         await logger.debug(f"Пользователь {user_full_name} отправил сообщение с текстом: {message_text}")
-        rag_answer = await ragflow.send_msg_to_rag(bot=bot, user_id=user_id,message_text=message_text)
+        rag_answer = await ragflow.send_msg_to_rag(bot=bot, user_id=user_id, message_text=message_text)
         if rag_answer:
             answer_text, keyboard = rag_answer
             await logger.debug(f"Ответ ИИ: [{answer_text}], кнопки: [{keyboard}]")
@@ -311,10 +315,10 @@ async def message_handler(message, state, bot):
         # Если ответа от RAG не вернулся - отправляем сообщение об этом
         else:
             await bot.send_message(
-                    chat_id=user_id,
-                    text="*Не могу ответить...*\nПопробуйте задать вопрос ещё раз",
-                    parse_mode="Markdown"
-                )
+                chat_id=user_id,
+                text="*Не могу ответить...*\nПопробуйте задать вопрос ещё раз",
+                parse_mode="Markdown"
+            )
             await logger.error(f"Не удалось отправить ответ пользователю {user_full_name}")
 
     # Если сообщение должно идти в живую поддержку
@@ -354,7 +358,6 @@ async def message_handler(message, state, bot):
             file_name = "voice.ogg"
             attachments.append({"file_type": "audio", "file_path": file.file_path, "file_name": file_name})
 
-
         # Отправляем сначала файлы, если они есть
         for attachment in attachments:
             # Отправляем в JIVO
@@ -379,10 +382,10 @@ async def message_handler(message, state, bot):
                 original_file_name = result.get('original_file_name', None)
                 if file_name and original_file_name:
                     saved = await funcs.add_msg_to_history(content=original_file_name,
-                                                           name=file_name,
-                                                           type=attachment.get('file_type'),
-                                                           chat_id=user_id,
-                                                           author_id=user_id)
+                                                            name=file_name,
+                                                            type=attachment.get('file_type'),
+                                                            chat_id=user_id,
+                                                            author_id=user_id)
                     if not saved:
                         await logger.error(f'Сообщение от user_id={message.from_user.id} не записан в БД в историю сообщений!')
                 else:
@@ -410,19 +413,18 @@ async def message_handler(message, state, bot):
             await funcs.deactivate_msgs_for_user(user_id=user_id, end_date=last_create_at)
 
 
-
-
 async def start_notifier():
     # запускаем цикл уведомлений с покерхаба
     asyncio.create_task(notifier.main())
     # запускаем цикл отложенных уведомлений бота
     asyncio.create_task(notificator.main())
 
+
 async def main():
     dp.include_routers(
-        notifier.router, # уведомления с покерхаб
-        auth_pokerhub.router, # авторизация в ПХ
-        logic_core.router, # "личности" бота
+        notifier.router,  # уведомления с покерхаб
+        auth_pokerhub.router,  # авторизация в ПХ
+        logic_core.router,  # "личности" бота
         router
     )
 

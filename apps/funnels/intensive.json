@@ -1,0 +1,350 @@
+{
+    "start": {
+        "default": {
+            "text": null,
+            "action": {
+                "func": "return_ok",
+                "is_ok": "doge2_1"
+            }
+        }
+    },
+    "callback": {
+        "doge2_1": {
+            "text": "<b>🔥 Интенсив PokerHUB</b>\n\n{first_name}, мы собрали трёхдневную программу, которая помогает быстро войти в дисциплину и получить обратную связь от тренеров Firestorm.\n\nВнутри:\n• живые разборы стратегий Spin, Cash и MTT;\n• индивидуальные задания на каждый день;\n• поддержка комьюнити и менеджера курса.\n\nВыберите, с чего начать ↓",
+            "event": "intensive_entry_screen",
+            "label": "doge2.1",
+            "user_history": "Открыл интенсив",
+            "file": {
+                "content_type": "image",
+                "file_path": "media/banner.png",
+                "tg_filename": "intensive_banner.png"
+            },
+            "buttons": [
+                [
+                    {
+                        "title": "Программа интенсива",
+                        "callback": "doge2_program"
+                    }
+                ],
+                [
+                    {
+                        "title": "Как проходит",
+                        "callback": "doge2_format"
+                    }
+                ],
+                [
+                    {
+                        "title": "Получить ссылку",
+                        "callback": "doge2_link_request"
+                    }
+                ],
+                [
+                    {
+                        "title": "Отправить юзернейм",
+                        "callback": "doge2_username_prompt"
+                    }
+                ]
+            ],
+            "notifications": [
+                {
+                    "message": "doge2_followup_program",
+                    "at_time": {
+                        "time": "10:00",
+                        "delta_days": 1
+                    }
+                }
+            ]
+        },
+        "doge2_program": {
+            "text": "<b>Программа на 3 дня</b>\n\n<b>День 1.</b> Фундамент дисциплины и чек-листы для быстрой адаптации.\n<b>День 2.</b> Работаем с диапазонами, рассчитываем EV и разбираем ваши раздачи.\n<b>День 3.</b> Финальный практикум и подбор индивидуальных целей.\n\nКаждый модуль сопровождается гайдом и домашним заданием, которое проверяет тренер.",
+            "event": "intensive_program_screen",
+            "label": "doge2.2",
+            "file": {
+                "content_type": "document",
+                "file_path": "media/math_start.pdf",
+                "tg_filename": "intensive_program.pdf"
+            },
+            "buttons": [
+                [
+                    {
+                        "title": "Смотреть формат",
+                        "callback": "doge2_format"
+                    }
+                ],
+                [
+                    {
+                        "title": "Записаться",
+                        "link": "https://pokerhub.pro/intensive"
+                    }
+                ],
+                [
+                    {
+                        "title": "Получить ссылку",
+                        "callback": "doge2_link_request"
+                    }
+                ]
+            ],
+            "notifications": [
+                {
+                    "message": "doge2_followup_cases",
+                    "at_time": {
+                        "time": "10:00",
+                        "delta_days": 2
+                    }
+                }
+            ]
+        },
+        "doge2_format": {
+            "text": "<b>Как проходит интенсив</b>\n\n• Мини-группа до 20 игроков.\n• Разборы проходят в Zoom, запись прикрепляем сразу.\n• В чатах можно задавать вопросы 24/7, куратор отвечает в течение 5 минут.\n• В конце выдаём чек-лист развития и доступ к материалам ещё на неделю.\n\nГотовы ворваться?",
+            "event": "intensive_format_screen",
+            "label": "doge2.3",
+            "file": {
+                "content_type": "image",
+                "file_path": "media/select_spin.png",
+                "tg_filename": "intensive_format.png"
+            },
+            "buttons": [
+                [
+                    {
+                        "title": "Вернуться к программе",
+                        "callback": "doge2_program"
+                    }
+                ],
+                [
+                    {
+                        "title": "Получить ссылку",
+                        "callback": "doge2_link_request"
+                    }
+                ],
+                [
+                    {
+                        "title": "Отправить юзернейм",
+                        "callback": "doge2_username_prompt"
+                    }
+                ]
+            ],
+            "notifications": [
+                {
+                    "message": "doge2_followup_program",
+                    "at_time": {
+                        "wait_seconds": 7200
+                    }
+                }
+            ]
+        },
+        "doge2_link_request": {
+            "text": "<b>Ссылка доступна зарегистрированным участникам</b>\n\nЕсли вы уже оформили слот на интенсив, нажмите \"Я уже внутри\" — бот проверит регистрацию и откроет комнату.\n\nЕсли нет — оформите заявку, это бесплатно.",
+            "event": "intensive_link_check",
+            "label": "doge2.4",
+            "file": {
+                "content_type": "image",
+                "file_path": "media/wecard1.jpg",
+                "tg_filename": "intensive_waitlist.jpg"
+            },
+            "buttons": [
+                [
+                    {
+                        "title": "Регистрация",
+                        "link": "https://pokerhub.pro/intensive"
+                    }
+                ],
+                [
+                    {
+                        "title": "Открыть форму",
+                        "web_app": "https://tg.pokerhub.pro/intensive"
+                    }
+                ],
+                [
+                    {
+                        "title": "Я уже внутри",
+                        "callback": "doge2_link_request"
+                    }
+                ]
+            ],
+            "action": {
+                "func": "check_pokerhub",
+                "is_ok": "doge2_link_ready"
+            },
+            "notifications": [
+                {
+                    "message": "doge2_followup_program",
+                    "at_time": {
+                        "time": "09:00",
+                        "delta_days": 1
+                    }
+                }
+            ]
+        },
+        "doge2_link_ready": {
+            "text": "<b>Комната интенсива уже ждёт</b>\n\n1️⃣ Жми на кнопку ниже и попади в эфир.\n2️⃣ Добавь ссылку в закладки — мы будем присылать напоминания.\n3️⃣ Отправь свой юзернейм менеджеру, чтобы закрепиться в списке.",
+            "event": "intensive_link_sent",
+            "label": "doge2.4-link",
+            "file": {
+                "content_type": "image",
+                "file_path": "media/wecard2.jpg",
+                "tg_filename": "intensive_link.jpg"
+            },
+            "buttons": [
+                [
+                    {
+                        "title": "Зайти в комнату",
+                        "link": "https://t.me/+firestorm_intensive"
+                    }
+                ],
+                [
+                    {
+                        "title": "Открыть веб-приложение",
+                        "web_app": "https://tg.pokerhub.pro/intensive/room"
+                    }
+                ],
+                [
+                    {
+                        "title": "Отправить юзернейм",
+                        "callback": "doge2_username_prompt"
+                    }
+                ]
+            ],
+            "notifications": [
+                {
+                    "message": "doge2_username_prompt",
+                    "at_time": {
+                        "wait_seconds": 600
+                    }
+                }
+            ]
+        },
+        "doge2_username_prompt": {
+            "text": "<b>Отправьте юзернейм PokerHUB</b>\n\nНам нужен ваш ник из платформы или @username, чтобы закрепить место и отправить чек-листы. Просто напишите его одним сообщением.",
+            "event": "intensive_username_request",
+            "label": "doge2.5",
+            "file": {
+                "content_type": "image",
+                "file_path": "media/wecard3.jpg",
+                "tg_filename": "intensive_username.jpg"
+            },
+            "actions": [
+                {
+                    "func": "start_fsm",
+                    "collect_data": [
+                        {
+                            "name": "intensive_username",
+                            "expected_data": "text",
+                            "is_ok_msg": "Отлично! Передали юзернейм менеджеру, ждите ответ в чате.",
+                            "is_not_ok_msg": "Отправьте ник текстом или просто напишите @username."
+                        }
+                    ],
+                    "if_collected": "return_ok"
+                }
+            ],
+            "buttons": [
+                [
+                    {
+                        "title": "Я отправил юзернейм",
+                        "callback": "doge2_username_done"
+                    }
+                ],
+                [
+                    {
+                        "title": "Вернуться к началу",
+                        "callback": "doge2_1"
+                    }
+                ]
+            ],
+            "notifications": [
+                {
+                    "message": "doge2_followup_cases",
+                    "at_time": {
+                        "time": "12:00",
+                        "delta_days": 1
+                    }
+                }
+            ]
+        },
+        "doge2_username_done": {
+            "text": "<b>Спасибо!</b>\n\nМы закрепили ваш ник и отправим напоминание перед стартом. Пока можете повторить программу или посмотреть кейсы выпускников.",
+            "event": "intensive_username_done",
+            "label": "doge2.5-done",
+            "file": {
+                "content_type": "image",
+                "file_path": "media/wecard4.jpg",
+                "tg_filename": "intensive_ready.jpg"
+            },
+            "actions": [
+                {
+                    "func": "funnel_passed"
+                }
+            ],
+            "buttons": [
+                [
+                    {
+                        "title": "Вернуться к программе",
+                        "callback": "doge2_program"
+                    }
+                ],
+                [
+                    {
+                        "title": "Открыть комнату",
+                        "callback": "doge2_link_request"
+                    }
+                ]
+            ]
+        },
+        "doge2_followup_program": {
+            "text": "<b>Напоминание про интенсив</b>\n\nЕщё можно присоединиться к ближайшему потоку. Программа и ссылка внутри бота — посмотрите, пока места свободны.",
+            "event": "intensive_followup_program",
+            "label": "doge2.6",
+            "file": {
+                "content_type": "image",
+                "file_path": "media/wecard5.jpg",
+                "tg_filename": "intensive_followup.jpg"
+            },
+            "buttons": [
+                [
+                    {
+                        "title": "Программа",
+                        "callback": "doge2_program"
+                    }
+                ],
+                [
+                    {
+                        "title": "Получить ссылку",
+                        "callback": "doge2_link_request"
+                    }
+                ]
+            ],
+            "notifications": [
+                {
+                    "message": "doge2_followup_cases",
+                    "at_time": {
+                        "time": "11:00",
+                        "delta_days": 1
+                    }
+                }
+            ]
+        },
+        "doge2_followup_cases": {
+            "text": "<b>Кейсы выпускников</b>\n\nЗа прошлый поток 12 игроков вышли на профит $1 200+ в Spin и Cash. Разборы и записи уже в чате — забронируйте место, чтобы попасть в следующий поток.",
+            "event": "intensive_followup_cases",
+            "label": "doge2.7",
+            "file": {
+                "content_type": "image",
+                "file_path": "media/leaderboard.png",
+                "tg_filename": "intensive_cases.png"
+            },
+            "buttons": [
+                [
+                    {
+                        "title": "Записаться",
+                        "link": "https://pokerhub.pro/intensive"
+                    }
+                ],
+                [
+                    {
+                        "title": "Связаться с менеджером",
+                        "callback": "doge2_username_prompt"
+                    }
+                ]
+            ]
+        }
+    }
+}
