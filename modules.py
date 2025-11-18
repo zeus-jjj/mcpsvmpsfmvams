@@ -27,8 +27,27 @@ MYSQL_CONFIG = {
 }
 
 
-FUNNELS_DIR = Path("funnels")
-FALLBACK_MAP_PATH = Path("map.json")
+BASE_DIR = Path(__file__).resolve().parent
+FUNNELS_DIR = BASE_DIR / "apps" / "funnels"
+FALLBACK_MAP_PATH = BASE_DIR / "map.json"
+
+try:
+    from apps.funnels import FUNNEL_ALIASES as _DECLARED_FUNNEL_ALIASES
+except Exception:
+    _DECLARED_FUNNEL_ALIASES = {}
+
+FUNNEL_ALIASES = {
+    (alias or "").lower(): (target or "").lower()
+    for alias, target in _DECLARED_FUNNEL_ALIASES.items()
+    if alias and target
+}
+
+
+def normalize_funnel_name(name: str | None) -> str | None:
+    if not name:
+        return name
+    normalized = name.lower()
+    return FUNNEL_ALIASES.get(normalized, normalized)
 
 
 def _load_funnels() -> dict:
@@ -52,9 +71,15 @@ def _load_funnels() -> dict:
 
 
 FUNNELS = _load_funnels()
+
+
+def _default_funnel() -> str:
+    return "default" if "default" in FUNNELS else next(iter(FUNNELS), "default")
+
+
 _current_funnel: ContextVar[str] = ContextVar(
     "current_funnel",
-    default="default" if "default" in FUNNELS else next(iter(FUNNELS), "default"),
+    default=_default_funnel(),
 )
 
 
@@ -63,16 +88,19 @@ def available_funnels() -> tuple[str, ...]:
 
 
 def set_current_funnel(name: str) -> None:
-    if name not in FUNNELS:
+    resolved = normalize_funnel_name(name)
+    if not resolved or resolved not in FUNNELS:
         raise KeyError(name)
-    _current_funnel.set(name)
+    _current_funnel.set(resolved)
+
 
 
 def get_funnel(name: str | None = None) -> dict:
-    target = name or _current_funnel.get()
+    target = normalize_funnel_name(name) if name else _current_funnel.get()
     if target not in FUNNELS:
         raise KeyError(target)
     return FUNNELS[target]
+
 
 
 try:

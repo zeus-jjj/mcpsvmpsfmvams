@@ -74,7 +74,7 @@
                 [
                     {
                         "title": "Записаться",
-                        "link": "https://pokerhub.pro/intensive"
+                        "link": "https://pokerhub.pro/intensive?utm_source=tg_bot&utm_medium=intensive_branch&utm_campaign=webinar_intensive&utm_content=doge2_program_button"
                     }
                 ],
                 [
@@ -145,13 +145,13 @@
                 [
                     {
                         "title": "Регистрация",
-                        "link": "https://pokerhub.pro/intensive"
+                        "link": "https://pokerhub.pro/intensive?utm_source=tg_bot&utm_medium=intensive_branch&utm_campaign=webinar_intensive&utm_content=doge2_register_primary"
                     }
                 ],
                 [
                     {
                         "title": "Открыть форму",
-                        "web_app": "https://tg.pokerhub.pro/intensive"
+                        "web_app": "https://tg.pokerhub.pro/intensive?utm_source=tg_bot&utm_medium=intensive_branch&utm_campaign=webinar_intensive&utm_content=doge2_form"
                     }
                 ],
                 [
@@ -194,7 +194,7 @@
                 [
                     {
                         "title": "Открыть веб-приложение",
-                        "web_app": "https://tg.pokerhub.pro/intensive/room"
+                        "web_app": "https://tg.pokerhub.pro/intensive/room?utm_source=tg_bot&utm_medium=intensive_branch&utm_campaign=webinar_intensive&utm_content=doge2_room"
                     }
                 ],
                 [
@@ -335,7 +335,7 @@
                 [
                     {
                         "title": "Записаться",
-                        "link": "https://pokerhub.pro/intensive"
+                        "link": "https://pokerhub.pro/intensive?utm_source=tg_bot&utm_medium=intensive_branch&utm_campaign=webinar_intensive&utm_content=doge2_followup_register"
                     }
                 ],
                 [

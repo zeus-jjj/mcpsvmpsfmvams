@@ -11,6 +11,7 @@ from modules import (
     create_connect,
     dp,
     get_data,
+    normalize_funnel_name,
     set_current_funnel,
 )
 #
@@ -98,7 +99,7 @@ async def process_start_command(message: types.Message, bot):
         # content
         data['co'] = content
 
-    funnel_name = (data.get("fn") or DEFAULT_FUNNEL).lower()
+    funnel_name = normalize_funnel_name(data.get("fn") or DEFAULT_FUNNEL)
 
     # Если есть, значит бота запустили с целью авторизации на ПХ
     auth_code = data.get('auth', None)
